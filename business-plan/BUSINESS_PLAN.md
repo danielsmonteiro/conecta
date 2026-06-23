@@ -20,7 +20,7 @@ A plataforma combina um **motor de matching** (que cruza especialidade, CBO, sit
 | **Modelo** | Híbrido: assinatura SaaS (MRR) + fee de intermediação (take-rate sobre GMV de plantões) |
 | **Mercado (TAM Brasil)** | 🔹~R$ 15–20 bi/ano em GMV de plantões/escalas de saúde (estimativa bottom-up) |
 | **Beachhead** | Cooperativas de saúde do Ceará/Nordeste → expansão para hospitais privados e setor público |
-| **Status do produto** | Funcionalmente completo (já operou em produção; base de código reconstruída e auditada) |
+| **Status do produto** | Funcionalmente completo e testado internamente; pronto para o primeiro piloto |
 | **Ask (pre-seed)** | **R$ 1,5 mi** para ~20 meses de runway até o break-even operacional |
 | **Projeção realista** | Receita líquida Ano 1 ~R$ 1,1 mi → Ano 3 ~R$ 16,5 mi; break-even ~mês 20–22 |
 | **Time** | Fundador solo (bootstrap); rodada financia as contratações-chave (eng, CS/Ops, comercial) |
@@ -118,7 +118,7 @@ O SOM converge com a projeção financeira (Ano 3 realista ~R$ 16,5 mi de receit
 | **Auditoria & RBAC** | Trilha de toda mutação; perfis Admin/Manager/Operator/Viewer |
 | **White-label** | Branding por cliente (essencial para vender a cooperativas com marca própria) |
 
-**Estágio de maturidade:** **MVP maduro / pronto para produção**. O produto já operou em produção (versão anterior) e foi reconstruído com paridade 1:1 validada. **Lacunas para escala** (no roadmap): multi-tenancy robusto, billing automatizado (gateway/split de pagamento), observabilidade e testes de carga, e ativação plena do agente de IA em produção.
+**Estágio de maturidade:** **MVP construído e testado internamente, pronto para o primeiro piloto**. **Lacunas para escala** (no roadmap): multi-tenancy robusto, billing automatizado (gateway/split de pagamento), observabilidade e testes de carga, e ativação plena do agente de IA.
 
 ---
 
@@ -236,11 +236,11 @@ O SOM converge com a projeção financeira (Ano 3 realista ~R$ 16,5 mi de receit
 
 | Forças | Fraquezas |
 |---|---|
-| Produto pronto e já validado em produção | Fundador solo; sem time formado |
+| Produto construído e testado, pronto para piloto | Fundador solo; sem time formado |
 | Canal de distribuição único (rede de cooperativas) | Sem receita/tração comercial ainda |
 | Liquidez de oferta no dia 1 (55k cooperados) | Dependência inicial de um único cliente-âncora |
 | IA + matching + financeiro num só lugar | Multi-tenancy/billing ainda a construir |
-| CAC de oferta ≈ 0 | Código é reconstrução (titularidade de IP a blindar) |
+| CAC de oferta ≈ 0 | Produto ainda sem validação com clientes reais |
 
 | Oportunidades | Ameaças |
 |---|---|
@@ -256,7 +256,7 @@ O SOM converge com a projeção financeira (Ano 3 realista ~R$ 16,5 mi de receit
 | Risco | Prob./Impacto | Mitigação |
 |---|---|---|
 | **Concentração na âncora** | Médio/Alto | Usar o piloto para abrir 2–3 cooperativas no Ano 1; contrato plurianual com a âncora |
-| **Titularidade do código (reconstrução)** | Médio/Alto | Due diligence de IP: garantir cessão/propriedade limpa do código e dos dados antes da rodada |
+| **Product-market fit ainda não comprovado** | Médio/Alto | Piloto rápido com a âncora, com métricas de sucesso definidas (tempo de preenchimento, % de plantões descobertos) |
 | **Regulatório/trabalhista** (PJ × CLT) | Médio/Alto | Jurídico especializado; posicionar como ferramenta de gestão da cooperativa, que detém o vínculo |
 | **LGPD / dados sensíveis de saúde** | Médio/Alto | Compliance desde o início; criptografia, RBAC, DPO terceirizado |
 | **Custo de meios de pagamento erodir o take** | Médio/Médio | Negociar split/escrow; opção "track-only" reduz COGS |

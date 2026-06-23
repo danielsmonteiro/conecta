@@ -89,10 +89,10 @@ s.addText([{ text: "Resultado:  ", options: { bold: true, color: TEAL } },
 pageFoot(s, 3);
 
 // ============================================================ 4 PRODUTO
-s = p.addSlide(); bg(s, BG); kicker(s, "Produto"); title(s, "Não é protótipo: o produto já operou em produção");
+s = p.addSlide(); bg(s, BG); kicker(s, "Produto"); title(s, "Não é uma ideia: o produto já está construído e testado");
 card(s, M, 1.95, 5.55, 4.55, { fill: NAVY });
 s.addText("Já construído e testado", { x: M + 0.4, y: 2.25, w: 4.8, h: 0.5, fontFace: F, fontSize: 18, bold: true, color: "FFFFFF" });
-[["32/32", "testes de API aprovados"], ["14/14", "regras de negócio validadas"], ["~20", "módulos de domínio"], ["1:1", "paridade com a produção anterior"]].forEach((r, i) => {
+[["32/32", "testes de API aprovados"], ["14/14", "regras de negócio validadas"], ["~20", "módulos de domínio"], ["Pronto", "para o primeiro piloto"]].forEach((r, i) => {
   const y = 2.95 + i * 0.82;
   s.addText(r[0], { x: M + 0.4, y, w: 1.5, h: 0.6, fontFace: F, fontSize: 26, bold: true, color: TEAL });
   s.addText(r[1], { x: M + 2.0, y: y + 0.1, w: 3.3, h: 0.5, fontFace: F, fontSize: 13, color: "CADCFC" });
@@ -278,7 +278,7 @@ use.forEach((u, i) => {
   s.addText(u[0], { x: M + 0.45, y, w: 0.95, h: 0.4, fontFace: F, fontSize: 14, bold: true, color: TEAL });
   s.addText(u[1], { x: M + 1.5, y, w: 3.6, h: 0.4, fontFace: F, fontSize: 13, color: "FFFFFF" });
 });
-const why = [["Produto pronto","já validado em produção, base de código auditada"],
+const why = [["Produto pronto","construído e testado, pronto para implantar"],
   ["Distribuição única","a rede de cooperativas de saúde como esteira"],
   ["Liquidez no dia 1","55k cooperados de oferta, CAC ≈ 0"],
   ["Founder técnico","executa o roadmap; rodada monta o time"]];

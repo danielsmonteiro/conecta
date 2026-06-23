@@ -1,0 +1,6 @@
+# Dependências e artefatos de build/render (regeneráveis)
+node_modules/
+*.pdf
+slide-*.jpg
+doc-*.jpg
+_toc_pages.json

@@ -147,7 +147,7 @@ const s1 = [
     ["Modelo", "Híbrido: assinatura SaaS (MRR) + fee de intermediação (take-rate sobre GMV de plantões)"],
     ["Mercado (TAM Brasil)", "🔹 ~R$ 15–20 bi/ano em GMV de plantões/escalas de saúde (estimativa bottom-up)"],
     ["Beachhead", "Cooperativas de saúde do Ceará/Nordeste → hospitais privados → setor público"],
-    ["Status do produto", "Funcionalmente completo (já operou em produção; base de código reconstruída e auditada)"],
+    ["Status do produto", "Funcionalmente completo e testado internamente; pronto para o primeiro piloto"],
     ["Ask (pre-seed)", "R$ 1,5 mi para ~20 meses de runway até o break-even operacional"],
     ["Projeção realista", "Receita líquida Ano 1 ~R$ 1,1 mi → Ano 3 ~R$ 16,5 mi; break-even ~mês 20–22"],
     ["Time", "Fundador solo (bootstrap); a rodada financia eng, CS/Ops e comercial"],
@@ -238,7 +238,7 @@ const s5 = [
   ], { firstBold: true }),
   spacer(100),
   P([new TextRun({ text: "Maturidade: ", bold: true, font: FONT, size: 22, color: NAVY }),
-     new TextRun({ text: "MVP maduro / pronto para produção. O produto já operou em produção e foi reconstruído com paridade 1:1 validada. Lacunas para escala (no roadmap): multi-tenancy robusto, billing automatizado (gateway/split), observabilidade, testes de carga e ativação plena da IA em produção.", font: FONT, size: 22 })]),
+     new TextRun({ text: "MVP construído e testado internamente, pronto para o primeiro piloto. Lacunas para escala (no roadmap): multi-tenancy robusto, billing automatizado (gateway/split), observabilidade, testes de carga e ativação plena do agente de IA.", font: FONT, size: 22 })]),
 ];
 
 // ---------------------------------------------------------------- 6. GTM
@@ -347,9 +347,9 @@ const s9 = [
     new TableRow({ children: [headCell("Forças", "1E7A34"), headCell("Fraquezas", "B45309")] }),
     new TableRow({ children: [
       new TableCell({ width: { size: 4513, type: WidthType.DXA }, borders, margins: cellMargins, verticalAlign: VerticalAlign.TOP, children:
-        ["Produto pronto e já validado em produção","Canal de distribuição único (rede de cooperativas)","Liquidez de oferta no dia 1 (55k cooperados)","IA + matching + financeiro num só lugar","CAC de oferta ≈ 0"].map((t)=>new Paragraph({ numbering:{reference:"tb",level:0}, spacing:{after:30,line:240}, children:[new TextRun({text:t,font:FONT,size:18})]})) }),
+        ["Produto construído e testado, pronto para piloto","Canal de distribuição único (rede de cooperativas)","Liquidez de oferta no dia 1 (55k cooperados)","IA + matching + financeiro num só lugar","CAC de oferta ≈ 0"].map((t)=>new Paragraph({ numbering:{reference:"tb",level:0}, spacing:{after:30,line:240}, children:[new TextRun({text:t,font:FONT,size:18})]})) }),
       new TableCell({ width: { size: 4513, type: WidthType.DXA }, borders, margins: cellMargins, verticalAlign: VerticalAlign.TOP, children:
-        ["Fundador solo; sem time formado","Sem receita/tração comercial ainda","Dependência inicial de um único cliente-âncora","Multi-tenancy/billing ainda a construir","Código é reconstrução (titularidade de IP a blindar)"].map((t)=>new Paragraph({ numbering:{reference:"tb",level:0}, spacing:{after:30,line:240}, children:[new TextRun({text:t,font:FONT,size:18})]})) }),
+        ["Fundador solo; sem time formado","Sem receita/tração comercial ainda","Dependência inicial de um único cliente-âncora","Multi-tenancy/billing ainda a construir","Produto ainda sem validação com clientes reais"].map((t)=>new Paragraph({ numbering:{reference:"tb",level:0}, spacing:{after:30,line:240}, children:[new TextRun({text:t,font:FONT,size:18})]})) }),
     ]}),
     new TableRow({ children: [headCell("Oportunidades", "1F6FB2"), headCell("Ameaças", "9B1C1C")] }),
     new TableRow({ children: [
@@ -366,7 +366,7 @@ const s10 = [
   H1("10. Riscos e plano de mitigação"),
   table([3000, 1800, 4226], ["Risco", "Prob./Impacto", "Mitigação"], [
     ["Concentração na âncora", "Médio/Alto", "Usar o piloto para abrir 2–3 cooperativas no Ano 1; contrato plurianual com a âncora"],
-    ["Titularidade do código (reconstrução)", "Médio/Alto", "Due diligence de IP: garantir cessão/propriedade limpa do código e dos dados antes da rodada"],
+    ["Product-market fit ainda não comprovado", "Médio/Alto", "Piloto rápido com a âncora, com métricas de sucesso definidas (tempo de preenchimento, % de plantões descobertos)"],
     ["Regulatório/trabalhista (PJ × CLT)", "Médio/Alto", "Jurídico especializado; posicionar como ferramenta de gestão da cooperativa, que detém o vínculo"],
     ["LGPD / dados sensíveis de saúde", "Médio/Alto", "Compliance desde o início; criptografia, RBAC, DPO terceirizado"],
     ["Meios de pagamento erodirem o take", "Médio/Médio", "Negociar split/escrow; opção “track-only” reduz COGS"],
