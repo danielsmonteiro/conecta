@@ -272,5 +272,40 @@ setc(ws5, f"B{r+3}", "='DRE (Realista)'!B14", GREEN, CUR)
 for col, w in zip("ABCD", [34, 12, 18, 4]):
     ws5.column_dimensions[col].width = w
 
+# ---------------------------------------------------------------- ROI COAPH / ECONOMIA OPERACIONAL
+ws6 = wb.create_sheet("ROI Coaph", 1)  # 2ª aba — tese defensiva
+ws6.sheet_view.showGridLines = False
+setc(ws6, "A1", "ROI Coaph — Economia Operacional (tese defensiva)", TITLE, border=False)
+setc(ws6, "A2", "Economia na operação da PRÓPRIA Coaph ao automatizar a gestão de plantões. NÃO é receita do HealthMatch — é a justificativa estratégica do investimento pela Coaph (paga-se mesmo sem escala externa).", SUB, border=False)
+ws6.merge_cells("A1:F1"); ws6.merge_cells("A2:F2")
+
+setc(ws6, "A4", "Premissas (editáveis)", BOLD, fill=LBLUE); ws6.merge_cells("A4:C4")
+setc(ws6, "A5", "Custo atual/mês com prepostos e operação manual", BLACK)
+setc(ws6, "B5", 240000, BLUE, CUR, fill=YEL)
+setc(ws6, "A6", "Investimento total (pre-seed)", BLACK)
+setc(ws6, "B6", 1500000, BLUE, CUR, fill=YEL)
+setc(ws6, "A7", "Custo anual atual com prepostos", BLACK)
+setc(ws6, "B7", "=B5*12", BLACK, CUR, fill=GREY)
+
+setc(ws6, "A9", "Cenários de economia → payback do investimento", BOLD, fill=LBLUE); ws6.merge_cells("A9:F9")
+hdr(ws6, 10, 1, ["Cenário", "% economia", "Economia/mês", "Economia/ano", "Payback (meses)", "ROI anual"])
+scen_roi = [("Conservador", 0.25), ("Realista", 0.50), ("Otimista", 0.75), ("Teto teórico (não usar como base)", 1.00)]
+rr = 11
+for name, pct in scen_roi:
+    is_real = name == "Realista"
+    setc(ws6, f"A{rr}", name, BOLD if is_real else BLACK, fill=LBLUE if is_real else None)
+    setc(ws6, f"B{rr}", pct, BLUE, PCT, fill=YEL)
+    setc(ws6, f"C{rr}", f"=$B$5*B{rr}", BLACK, CUR, fill=LBLUE if is_real else None)
+    setc(ws6, f"D{rr}", f"=C{rr}*12", BLACK, CUR)
+    setc(ws6, f"E{rr}", f"=$B$6/C{rr}", BLACK, '#,##0.0', fill=LBLUE if is_real else None)
+    setc(ws6, f"F{rr}", f"=D{rr}/$B$6", BLACK, PCT)
+    rr += 1
+setc(ws6, f"A{rr+1}", "Base de defesa do investimento: 25% (conservador) a 50% (realista). 100% é teto teórico — exigiria redesenho operacional total e NÃO deve ser premissa-base.", SUB, border=False)
+ws6.merge_cells(f"A{rr+1}:F{rr+1}")
+setc(ws6, f"A{rr+2}", "Importante: esta economia NÃO se soma à receita do HealthMatch (abas Cenários/DRE). São lentes distintas — a economia justifica o aporte da Coaph; a receita é o upside da escala externa.", SUB, border=False)
+ws6.merge_cells(f"A{rr+2}:F{rr+2}")
+for col, w in zip("ABCDEF", [34, 11, 15, 15, 16, 12]):
+    ws6.column_dimensions[col].width = w
+
 wb.save("/Users/daniel/Projects/HealthMatch/business-plan/HealthMatch_Modelo_Financeiro.xlsx")
 print("saved")

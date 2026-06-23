@@ -1,17 +1,16 @@
 const fs = require("fs");
 const {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
-  Header, Footer, AlignmentType, LevelFormat, TableOfContents, HeadingLevel,
+  Header, Footer, AlignmentType, LevelFormat, HeadingLevel,
   BorderStyle, WidthType, ShadingType, VerticalAlign, PageNumber, PageBreak,
-  TabStopType, InternalHyperlink, Bookmark,
+  TabStopType,
 } = require("./node_modules/docx");
 
-// Page numbers for the manual TOC (measured from a render pass; see _toc_pages.json)
 let TOCPAGES = {};
 try { TOCPAGES = require("./_toc_pages.json"); } catch (e) { TOCPAGES = {}; }
 
 const NAVY = "0B2D5B", BLUE = "0B74D1", LIGHT = "DCE6F1", GREY = "F2F2F2", ACCENT = "1F6FB2";
-const CW = 9026; // A4 content width @1" margins
+const INK = "1A2B45", GREEN = "1E7A34", AMBER = "B45309";
 const FONT = "Arial";
 
 const border = { style: BorderStyle.SINGLE, size: 1, color: "CCCCCC" };
@@ -21,24 +20,24 @@ const cellMargins = { top: 60, bottom: 60, left: 110, right: 110 };
 
 function P(text, opts = {}) {
   const runs = Array.isArray(text) ? text : [new TextRun({ text, ...opts.run })];
-  return new Paragraph({ children: runs, spacing: { after: opts.after ?? 120, line: 264 },
-    alignment: opts.align, ...opts.p });
+  return new Paragraph({ children: runs, spacing: { after: opts.after ?? 120, line: 264 }, alignment: opts.align });
 }
-function H1(text) {
-  return new Paragraph({ heading: HeadingLevel.HEADING_1, pageBreakBefore: true,
-    children: [new TextRun(text)] });
+function lead(label, rest) {
+  return new Paragraph({ spacing: { after: 120, line: 264 }, children: [
+    new TextRun({ text: label, bold: true, font: FONT, size: 22, color: NAVY }),
+    new TextRun({ text: rest, font: FONT, size: 22 }) ] });
 }
+function H1(text) { return new Paragraph({ heading: HeadingLevel.HEADING_1, pageBreakBefore: true, children: [new TextRun(text)] }); }
 function H2(text) { return new Paragraph({ heading: HeadingLevel.HEADING_2, children: [new TextRun(text)] }); }
-function bullet(text, run = {}) {
-  return new Paragraph({ numbering: { reference: "b", level: 0 },
-    children: [new TextRun({ text, ...run })], spacing: { after: 60, line: 264 } });
+function bullet(text) { return new Paragraph({ numbering: { reference: "b", level: 0 }, children: [new TextRun({ text })], spacing: { after: 60, line: 264 } }); }
+function num(text) { return new Paragraph({ numbering: { reference: "n", level: 0 }, children: [new TextRun(text)], spacing: { after: 60, line: 264 } }); }
+function spacer(after = 140) { return new Paragraph({ spacing: { after }, children: [] }); }
+function note(text) {
+  return new Paragraph({ spacing: { before: 80, after: 160, line: 252 },
+    border: { left: { style: BorderStyle.SINGLE, size: 18, color: ACCENT, space: 8 } },
+    shading: { fill: "EEF4FA", type: ShadingType.CLEAR },
+    children: [new TextRun({ text, italics: true, font: FONT, size: 18, color: "333333" })] });
 }
-function num(text) {
-  return new Paragraph({ numbering: { reference: "n", level: 0 },
-    children: [new TextRun(text)], spacing: { after: 60, line: 264 } });
-}
-
-// cell content: string | array of strings (each a paragraph). opts: {bold, fill, color, size, align, bullets}
 function cell(content, w, opts = {}) {
   let paras;
   if (Array.isArray(content)) {
@@ -53,16 +52,12 @@ function cell(content, w, opts = {}) {
   }
   return new TableCell({ width: { size: w, type: WidthType.DXA }, borders, margins: cellMargins,
     verticalAlign: VerticalAlign.CENTER,
-    shading: opts.fill ? { fill: opts.fill, type: ShadingType.CLEAR } : undefined,
-    children: paras });
+    shading: opts.fill ? { fill: opts.fill, type: ShadingType.CLEAR } : undefined, children: paras });
 }
-
 function table(widths, headerRow, dataRows, opts = {}) {
   const rows = [];
-  if (headerRow) {
-    rows.push(new TableRow({ tableHeader: true, children: headerRow.map((h, i) =>
-      cell(h, widths[i], { bold: true, color: "FFFFFF", fill: NAVY, align: AlignmentType.CENTER, size: opts.hsize ?? 18 })) }));
-  }
+  if (headerRow) rows.push(new TableRow({ tableHeader: true, children: headerRow.map((h, i) =>
+    cell(h, widths[i], { bold: true, color: "FFFFFF", fill: NAVY, align: AlignmentType.CENTER, size: opts.hsize ?? 18 })) }));
   dataRows.forEach((r, ri) => {
     rows.push(new TableRow({ children: r.map((c, i) => {
       const co = (typeof c === "object" && !Array.isArray(c)) ? c : { v: c };
@@ -71,65 +66,55 @@ function table(widths, headerRow, dataRows, opts = {}) {
         bullets: co.bullets, color: co.color, align: co.align, size: co.size });
     }) }));
   });
-  return new Table({ width: { size: widths.reduce((a, b) => a + b, 0), type: WidthType.DXA },
-    columnWidths: widths, rows, borders });
+  return new Table({ width: { size: widths.reduce((a, b) => a + b, 0), type: WidthType.DXA }, columnWidths: widths, rows, borders });
 }
-function spacer(after = 160) { return new Paragraph({ spacing: { after }, children: [] }); }
-function note(text) {
-  return new Paragraph({ spacing: { before: 80, after: 160, line: 252 },
-    border: { left: { style: BorderStyle.SINGLE, size: 18, color: ACCENT, space: 8 } },
-    shading: { fill: "EEF4FA", type: ShadingType.CLEAR },
-    children: [new TextRun({ text, italics: true, font: FONT, size: 18, color: "333333" })] });
-}
+const headCell = (t, fill) => new TableCell({ width: { size: 4513, type: WidthType.DXA }, borders, margins: cellMargins,
+  shading: { fill, type: ShadingType.CLEAR }, children: [new Paragraph({ children: [new TextRun({ text: t, bold: true, color: "FFFFFF", font: FONT, size: 20 })] })] });
+const swotCol = (items) => new TableCell({ width: { size: 4513, type: WidthType.DXA }, borders, margins: cellMargins, verticalAlign: VerticalAlign.TOP,
+  children: items.map((t) => new Paragraph({ numbering: { reference: "tb", level: 0 }, spacing: { after: 30, line: 240 }, children: [new TextRun({ text: t, font: FONT, size: 18 })] })) });
 
 // ---------------------------------------------------------------- COVER
 const cover = [
-  new Paragraph({ spacing: { before: 1800, after: 0 }, children: [
-    new TextRun({ text: "HealthMatch", font: FONT, size: 72, bold: true, color: NAVY })] }),
+  new Paragraph({ spacing: { before: 1700, after: 0 }, children: [new TextRun({ text: "HealthMatch", font: FONT, size: 72, bold: true, color: NAVY })] }),
   new Paragraph({ spacing: { after: 240 }, border: { bottom: { style: BorderStyle.SINGLE, size: 12, color: BLUE, space: 6 } },
     children: [new TextRun({ text: "Business Plan", font: FONT, size: 40, color: BLUE })] }),
-  P([new TextRun({ text: "Plataforma de gestão e alocação inteligente de força de trabalho em saúde",
-    font: FONT, size: 26, color: "333333" })], { after: 600 }),
+  P([new TextRun({ text: "Software estratégico de automação operacional para a Coaph — com opção de virar plataforma escalável", font: FONT, size: 24, color: "333333" })], { after: 560 }),
   table([3000, 6026], null, [
-    [{ v: "Versão", bold: true, fill: LIGHT }, "Captação Pre-seed"],
+    [{ v: "Versão", bold: true, fill: LIGHT }, "Captação Pre-seed (revisão corporate venture)"],
     [{ v: "Data", bold: true, fill: LIGHT }, "Junho / 2026"],
     [{ v: "Estágio", bold: true, fill: LIGHT }, "Pré-lançamento — produto funcionalmente pronto"],
-    [{ v: "Beachhead", bold: true, fill: LIGHT }, "Fortaleza / Ceará"],
-    [{ v: "Modelo", bold: true, fill: LIGHT }, "Híbrido: SaaS (MRR) + fee de intermediação (take-rate)"],
-    [{ v: "Captação-alvo", bold: true, fill: LIGHT }, "R$ 1,5 milhão (pre-seed)"],
+    [{ v: "Âncora", bold: true, fill: LIGHT }, "Coaph (Fortaleza / Ceará) — investidor-cliente âncora"],
+    [{ v: "Tese", bold: true, fill: LIGHT }, "Defensiva (economia operacional da Coaph) + ofensiva (escala) — opcional"],
+    [{ v: "Ask", bold: true, fill: LIGHT }, "R$ 1,5 milhão — trancheado por resultado"],
   ]),
-  spacer(400),
-  note("Documento confidencial. Em pré-lançamento, sem receita realizada: todas as projeções são premissas de mercado, sinalizadas com 🔹, baseadas em benchmarks de SaaS/marketplace no Brasil (2024–2025) e a validar no piloto com a cooperativa-âncora."),
+  spacer(360),
+  note("Documento confidencial. Empresa em pré-lançamento, sem receita realizada. As projeções de receita do HealthMatch (tese ofensiva) são premissas de mercado (🔹). A economia operacional da Coaph (tese defensiva) parte de um custo atual informado (~R$ 240 mil/mês) e de percentuais a validar no piloto. As duas lentes são separadas e não se somam."),
   new Paragraph({ children: [new PageBreak()] }),
 ];
 
-// ---------------------------------------------------------------- TOC (manual, com nº de página real)
+// ---------------------------------------------------------------- TOC
 const TOC_ITEMS = [
   "1. Sumário executivo",
-  "2. Descrição da plataforma",
-  "3. Análise de mercado",
-  "4. Público-alvo e personas",
-  "5. Produto e funcionalidades",
-  "6. Estratégia de marketing e vendas (Go-to-Market)",
-  "7. Estrutura operacional e equipe",
-  "8. Plano financeiro SaaS",
-  "9. Análise SWOT",
-  "10. Riscos e plano de mitigação",
-  "11. Roadmap e próximos passos (12–36 meses)",
+  "2. A tese de investimento (defensiva + ofensiva)",
+  "3. Business Case para a Coaph",
+  "4. Descrição da plataforma",
+  "5. Análise de mercado",
+  "6. Público-alvo e personas",
+  "7. Produto e funcionalidades",
+  "8. Estratégia de marketing e vendas (Go-to-Market)",
+  "9. Estrutura operacional e equipe",
+  "10. Plano financeiro do HealthMatch (tese ofensiva)",
+  "11. KPIs do piloto Coaph",
+  "12. Análise SWOT",
+  "13. Riscos e plano de mitigação",
+  "14. Recomendação de investimento",
+  "15. Roadmap e próximos passos",
 ];
 function tocLine(text, i) {
   const pg = TOCPAGES["sec" + (i + 1)];
-  const pageStr = pg ? String(pg) : "";
-  return new Paragraph({
-    spacing: { after: 100, line: 276 },
-    tabStops: [{ type: TabStopType.RIGHT, position: 9026, leader: "dot" }],
-    children: [
-      new TextRun({ text, font: FONT, size: 22, color: INK }),
-      new TextRun({ text: "\t" + pageStr, font: FONT, size: 22, color: NAVY, bold: true }),
-    ],
-  });
+  return new Paragraph({ spacing: { after: 90, line: 264 }, tabStops: [{ type: TabStopType.RIGHT, position: 9026, leader: "dot" }],
+    children: [ new TextRun({ text, font: FONT, size: 22, color: INK }), new TextRun({ text: "\t" + (pg ? String(pg) : ""), font: FONT, size: 22, color: NAVY, bold: true }) ] });
 }
-const INK = "1A2B45";
 const toc = [
   new Paragraph({ spacing: { after: 240 }, children: [new TextRun({ text: "Sumário", font: FONT, size: 32, bold: true, color: NAVY })] }),
   ...TOC_ITEMS.map((t, i) => tocLine(t, i)),
@@ -138,270 +123,257 @@ const toc = [
 // ---------------------------------------------------------------- 1. SUMÁRIO EXECUTIVO
 const s1 = [
   H1("1. Sumário executivo"),
-  P("HealthMatch é uma plataforma B2B (SaaS + marketplace gerenciado) que resolve uma das dores mais caras e silenciosas da saúde brasileira: preencher plantões e vagas com o profissional certo, credenciado e disponível, no tempo certo — hoje feito à mão, por WhatsApp, planilhas e telefonemas."),
-  P("A plataforma combina um motor de matching (especialidade, CBO, situação de credenciamento, histórico de comparecimento e conflito de agenda), um agente de IA conversacional que aborda e negocia plantões via WhatsApp, e um back-office financeiro de intermediação (recebíveis do cliente, pagáveis ao profissional e margem da plataforma) — com trilha de auditoria e gestão de documentos."),
-  P([new TextRun({ text: "Diferencial de entrada (wedge): ", bold: true, font: FONT, size: 22, color: NAVY }),
-     new TextRun({ text: "o investidor-âncora é uma grande cooperativa de saúde do Ceará com 55 mil cooperados, que será simultaneamente (a) investidor estratégico, (b) primeiro cliente-âncora e (c) base massiva de oferta de profissionais. Isso elimina o problema do “ovo e galinha” de marketplaces: o HealthMatch nasce com liquidez de oferta e demanda no dia 1, com CAC de profissionais próximo de zero.", font: FONT, size: 22 })]),
-  spacer(80),
-  table([2400, 6626], ["Item", "Resumo"], [
-    ["Modelo", "Híbrido: assinatura SaaS (MRR) + fee de intermediação (take-rate sobre GMV de plantões)"],
-    ["Mercado (TAM Brasil)", "🔹 ~R$ 15–20 bi/ano em GMV de plantões/escalas de saúde (estimativa bottom-up)"],
-    ["Beachhead", "Cooperativas de saúde do Ceará/Nordeste → hospitais privados → setor público"],
-    ["Status do produto", "Funcionalmente completo e testado internamente; pronto para o primeiro piloto"],
-    ["Ask (pre-seed)", "R$ 1,5 mi para ~20 meses de runway até o break-even operacional"],
-    ["Projeção realista", "Receita líquida Ano 1 ~R$ 1,1 mi → Ano 3 ~R$ 16,5 mi; break-even ~mês 20–22"],
-    ["Time", "Fundador solo (bootstrap); a rodada financia eng, CS/Ops e comercial"],
+  lead("HealthMatch é, antes de tudo, um software estratégico de automação operacional para a Coaph", " — que automatiza a gestão de plantões, escalas, contatos, confirmações e o back-office financeiro hoje feitos à mão. Em segundo plano, é uma plataforma com potencial de escalar para outras cooperativas, hospitais e o setor público."),
+  lead("Hoje a Coaph gasta ~R$ 240 mil/mês (R$ 2,88 mi/ano) com prepostos", " dedicados à gestão manual de plantões. O HealthMatch ataca diretamente esse custo. É isso que sustenta o investimento — não a promessa de escala nacional."),
+  H2("Duas teses, deliberadamente separadas"),
+  table([1700, 3663, 3663], ["", "Tese defensiva (base da decisão)", "Tese ofensiva (upside opcional)"], [
+    [{ v: "Lógica", bold: true }, "Reduzir o custo operacional da própria Coaph", "Virar plataforma para outras cooperativas, hospitais e setor público"],
+    [{ v: "Métrica", bold: true }, "Economia mensal sobre os R$ 240 mil/mês", "Receita recorrente (SaaS) + take-rate (GMV)"],
+    [{ v: "Quem ganha", bold: true }, "Coaph (como cliente)", "HealthMatch (como empresa) e investidores"],
+    [{ v: "Papel", bold: true }, "Justifica o aporte sozinha", "Multiplica o retorno se acontecer"],
   ], { firstBold: true }),
-  spacer(100),
-  P([new TextRun({ text: "A tese: ", bold: true, font: FONT, size: 22, color: NAVY }),
-     new TextRun({ text: "o staffing de saúde tech-enabled está validado globalmente (Nomad Health, Trusted Health, Medely nos EUA; Patchwork e Locum’s Nest no Reino Unido captaram centenas de milhões de dólares). No Brasil, o setor é gigante e ainda artesanal. O HealthMatch ataca esse mercado com um canal de distribuição privilegiado (a rede de cooperativas de saúde) e um produto pronto.", font: FONT, size: 22 })]),
+  spacer(80),
+  lead("O pior cenário aceitável: ", "o HealthMatch gerar, dentro da Coaph, economia operacional suficiente para pagar o investimento. A 50% de substituição (realista), a economia é de R$ 120 mil/mês → payback de R$ 1,5 mi em ~12,5 meses, sem depender de um único cliente externo."),
+  spacer(40),
+  table([2700, 6326], ["Item", "Resumo"], [
+    ["Posicionamento", "Automação operacional para a Coaph (defensivo) + opção de plataforma escalável (ofensivo)"],
+    ["Custo atacado (Coaph)", "~R$ 240 mil/mês · R$ 2,88 mi/ano com prepostos/operação manual"],
+    ["Ask", "R$ 1,5 milhão, trancheado e condicionado a metas de adoção e economia"],
+    ["Payback (defensivo, realista 50%)", "~12,5 meses só com a economia da Coaph"],
+    ["Relação com a Coaph", "Investidor-cliente âncora (aporta capital e assina contrato como cliente)"],
+    ["Status do produto", "Funcionalmente completo e testado internamente; pronto para o piloto"],
+    ["Upside (ofensivo)", "Receita líquida Ano 3 ~R$ 16,5 mi (realista) se a escala externa acontecer"],
+  ], { firstBold: true }),
+  spacer(80),
+  note("Enquadramento honesto: para um investidor financeiro puro, o HealthMatch ainda é cedo (pré-receita, fundador solo, sem tração externa). Para a Coaph, o investimento pode ser racional mesmo sem escala externa, porque existe uma economia operacional concreta e mensurável de até R$ 240 mil/mês sendo atacada. A escala externa é upside, não premissa."),
 ];
 
-// ---------------------------------------------------------------- 2. DESCRIÇÃO
+// ---------------------------------------------------------------- 2. TESE
 const s2 = [
-  H1("2. Descrição da plataforma"),
-  P([new TextRun({ text: "Missão: ", bold: true, font: FONT, size: 22, color: NAVY }), new TextRun({ text: "garantir que toda unidade de saúde tenha o profissional certo no plantão certo — com agilidade, conformidade e custo justo.", font: FONT, size: 22 })]),
-  P([new TextRun({ text: "Visão: ", bold: true, font: FONT, size: 22, color: NAVY }), new TextRun({ text: "ser a camada de inteligência operacional do trabalho em saúde no Brasil — o “sistema operacional” que conecta profissionais, unidades, cooperativas e o poder público.", font: FONT, size: 22 })]),
+  H1("2. A tese de investimento (defensiva + ofensiva)"),
+  lead("Tese defensiva — eficiência operacional da Coaph (a base). ", "A Coaph mantém prepostos que, manualmente, montam escalas, contatam profissionais, negociam plantões, confirmam presença e conciliam pagamentos — custo de ~R$ 240 mil/mês. O HealthMatch automatiza grande parte desse fluxo (matching + IA no WhatsApp + confirmações + financeiro). Mesmo que o produto nunca seja vendido a terceiros, ele se justifica se reduzir esse custo o suficiente para pagar o aporte. A defesa do investimento é uma conta de redução de custo, não de receita futura."),
+  lead("Tese ofensiva — plataforma escalável (o upside). ", "A mesma plataforma pode ser oferecida a outras cooperativas, hospitais/redes privadas e ao setor público. Aí o HealthMatch vira uma empresa de SaaS + marketplace, com receita recorrente e take-rate sobre o GMV. Esse cenário transforma o aporte da Coaph em participação numa empresa de tecnologia — mas é opcional para a decisão."),
+  lead("Regra de decisão: ", "a Coaph investe pela tese defensiva e trata a ofensiva como bônus. Se a escala não vier, o capital já terá sido justificado pela economia interna. Se vier, o retorno se multiplica."),
+];
+
+// ---------------------------------------------------------------- 3. BUSINESS CASE COAPH
+const s3 = [
+  H1("3. Business Case para a Coaph"),
+  note("Premissas: custo atual R$ 240 mil/mês com prepostos; investimento R$ 1,5 mi. Esta análise é a economia da Coaph — não é receita do HealthMatch (ver §10) e as duas não se somam."),
+  H2("Payback da economia operacional"),
+  table([2126, 1700, 1300, 1300, 1300, 1300], ["Cenário", "Substituição", "Econ./mês", "Econ./ano", "Payback", "ROI anual"], [
+    [{ v: "Conservador", bold: true }, "25%", "R$ 60 mil", "R$ 720 mil", "~25 m", "48%"],
+    [{ v: "Realista", bold: true, fill: LIGHT }, { v: "50%", fill: LIGHT }, { v: "R$ 120 mil", fill: LIGHT, bold: true }, { v: "R$ 1,44 mi", fill: LIGHT }, { v: "~12,5 m", fill: LIGHT, bold: true }, { v: "96%", fill: LIGHT }],
+    [{ v: "Otimista", bold: true }, "75%", "R$ 180 mil", "R$ 2,16 mi", "~8,3 m", "144%"],
+    [{ v: "Teto teórico", color: "555555" }, { v: "100%", color: "555555" }, { v: "R$ 240 mil", color: "555555" }, { v: "R$ 2,88 mi", color: "555555" }, { v: "~6,3 m", color: "555555" }, { v: "192%", color: "555555" }],
+  ], { firstBold: true, hsize: 17 }),
+  spacer(60),
+  bullet("25% é a base conservadora de defesa; 50% a realista; 75% a otimista."),
+  bullet("100% não deve ser premissa — exigiria eliminar toda a operação manual e redesenhar processos, o que raramente ocorre."),
+  bullet("Mesmo no conservador (25%), o investimento se paga em ~2 anos apenas com a economia interna, antes de qualquer real de receita externa."),
+  spacer(40),
+  lead("Condição para a economia se materializar: ", "automatizar tarefas não basta — é preciso redesenhar o processo (realocar/reduzir prepostos, eliminar retrabalho). Por isso o piloto tem metas de redução de horas/custo, não só de uso do sistema (ver §11 e §13)."),
+];
+
+// ---------------------------------------------------------------- 4. DESCRIÇÃO
+const s4 = [
+  H1("4. Descrição da plataforma"),
+  lead("Missão: ", "garantir que toda unidade de saúde tenha o profissional certo no plantão certo — com agilidade, conformidade e custo justo."),
+  lead("Visão: ", "ser a camada de inteligência operacional do trabalho em saúde no Brasil."),
   H2("Proposta de valor"),
   table([2300, 3363, 3363], ["Para quem", "Dor hoje", "O que o HealthMatch entrega"], [
-    ["Cooperativas / intermediadoras", "Escala manual, WhatsApp, plantão descoberto, baixa visibilidade financeira", "Preenchimento automatizado, IA que negocia plantões 24/7, painel de margem em tempo real"],
-    ["Hospitais / redes privadas", "Plantões descobertos, dependência de poucos plantonistas, credenciamento manual", "Banco de plantonistas qualificados, matching com checagem de credencial e conflito de agenda"],
-    ["Setor público (SUS / UPAs)", "Dificuldade de cobertura, controle de presença, conformidade", "Gestão de escala com auditoria, controle de comparecimento e rastreabilidade"],
-    ["Profissionais de saúde", "Plantões via grupos informais, atrasos de pagamento, burocracia", "Ofertas compatíveis com o perfil via WhatsApp e transparência de pagamento"],
+    [{ v: "Coaph (âncora)", bold: true }, "~R$ 240 mil/mês em prepostos; escala manual; retrabalho", "Automação do fluxo de plantões → redução de custo operacional"],
+    ["Outras cooperativas", "Mesmo problema, sem tecnologia", "Plataforma pronta, white-label"],
+    ["Hospitais / redes privadas", "Plantões descobertos, credenciamento manual", "Banco de plantonistas, matching com checagem e conflito de agenda"],
+    ["Setor público (SUS/UPAs)", "Cobertura difícil, controle de presença", "Escala com auditoria e rastreabilidade"],
+    ["Profissionais de saúde", "Grupos informais, burocracia", "Ofertas compatíveis via WhatsApp, transparência"],
   ], { firstBold: true, hsize: 18 }),
-  spacer(100),
-  P([new TextRun({ text: "Capacidades já existentes no produto: ", bold: true, font: FONT, size: 22, color: NAVY }),
-     new TextRun({ text: "cadastro regulatório-aware (conselhos CRM/COREN/CREFITO, CBO, RQE, especialidades); matching com detecção de conflito de agenda e no-show; pipeline de vagas; candidaturas → alocações → escala com controle de presença; mensageria omnichannel (WhatsApp/SMS/e-mail) com agente de IA e handoff humano; financeiro de intermediação com margem; auditoria completa; RBAC; e white-label.", font: FONT, size: 22 })]),
-];
-
-// ---------------------------------------------------------------- 3. MERCADO
-const s3 = [
-  H1("3. Análise de mercado"),
-  H2("3.1 Contexto"),
-  P("O Brasil tem ~562 mil médicos ativos (CFM, 2024) e mais de 2,5 milhões de profissionais de saúde no total. A demanda por plantões é estrutural e crescente: envelhecimento populacional, expansão de UPAs/UBS, judicialização da saúde e déficit crônico de cobertura fora dos grandes centros. O preenchimento de plantões é, hoje, majoritariamente manual — grupos de WhatsApp, planilhas, agências locais e cooperativas com pouca tecnologia."),
-  H2("3.2 TAM / SAM / SOM (bottom-up)"),
-  note("🔹 Metodologia: GMV de plantões = nº de plantões/ano × ticket médio (assumido R$ 1.300/plantão de 12h; Nordeste tende a ser menor que SP). A receita endereçável é uma fração do GMV (take-rate + SaaS)."),
-  table([1500, 3526, 2000, 2000], ["Camada", "Definição", "GMV/ano", "Receita endereçável (≈10%)"], [
-    ["TAM", "Todo o GMV de plantões/escalas de saúde no Brasil", "🔹 R$ 15–20 bi", "🔹 R$ 1,5–2,0 bi"],
-    ["SAM", "Nordeste + cooperativas/hospitais privados/público", "🔹 R$ 3–4 bi", "🔹 R$ 300–450 mi"],
-    ["SOM (3–5 anos)", "CE + cooperativas adjacentes do NE capturáveis", "🔹 R$ 150–300 mi", "🔹 R$ 15–30 mi"],
-  ], { firstBold: true }),
   spacer(80),
-  P("O SOM converge com a projeção financeira (Ano 3 realista ~R$ 16,5 mi de receita líquida), mantendo o plano internamente consistente."),
-  H2("3.3 Tendências favoráveis"),
-  bullet("Digitalização tardia da saúde operacional — a “última milha” (RH/escala) ainda é manual."),
-  bullet("Maturação do WhatsApp Business + IA generativa: automação de recrutamento conversacional a custo marginal baixíssimo."),
-  bullet("Pressão por eficiência e conformidade no setor público (controle de presença, prestação de contas)."),
-  bullet("Modelo validado lá fora: Nomad Health, Trusted Health, Medely, ShiftMed (EUA); Patchwork, Locum’s Nest (Reino Unido)."),
-  H2("3.4 Concorrência"),
-  table([2400, 2400, 2113, 2113], ["Categoria", "Quem é", "Força", "Fraqueza (oportunidade)"], [
-    [{ v: "Status quo informal (concorrente #1)", bold: true }, "WhatsApp, planilhas, telefonemas, “donos de escala”", "Custo zero, já existe", "Não escala, sem auditoria, sem matching"],
-    ["Agências/cooperativas tradicionais", "Intermediadoras regionais, cooperativas médicas", "Relacionamento, base de médicos", "Pouca tecnologia, margens opacas"],
-    ["Software hospitalar (HIS)", "Tasy/MV, Soul MV, ProDoctor", "Implantados em hospitais", "Sem foco em matching, IA e plantão"],
-    ["Gestão de clínicas / agenda", "iClinic, Feegow, Docplanner", "Base instalada", "Foco em agenda clínica, não em escala"],
-    ["Marketplaces de saúde adjacentes", "Conexa, Docway (telemedicina)", "Tração digital", "Não atacam escala/plantão"],
-    ["Comps internacionais (validação)", "Nomad, Trusted, Medely, Patchwork", "Provam o modelo e o tamanho", "Não operam no Brasil"],
-  ], { firstBold: true, hsize: 17 }),
-  spacer(80),
-  P([new TextRun({ text: "Insight competitivo: ", bold: true, font: FONT, size: 22, color: NAVY }),
-     new TextRun({ text: "o concorrente a vencer não é outro software — é o processo manual + agências locais. O HealthMatch ganha por ser ~10x mais rápido e barato que a operação manual, com conformidade e dados que o status quo não oferece, entrando por um canal que ninguém mais tem (a rede de cooperativas).", font: FONT, size: 22 })]),
+  lead("Capacidades já existentes: ", "matching (especialidade, CBO, credencial, no-show, conflito de agenda); pipeline de vagas; candidaturas → alocações → escala com presença; mensageria omnichannel com agente de IA e handoff humano; financeiro de intermediação com margem; auditoria; RBAC; white-label."),
 ];
 
-// ---------------------------------------------------------------- 4. PÚBLICO
-const s4 = [
-  H1("4. Público-alvo e personas"),
-  P([new TextRun({ text: "ICP recomendado (beachhead): ", bold: true, font: FONT, size: 22, color: NAVY }),
-     new TextRun({ text: "começar dentro da cooperativa-âncora como design partner e primeiro cliente, usando seus 55 mil cooperados como oferta. Provar o modelo em Fortaleza, replicar para outras cooperativas do Nordeste, depois hospitais/redes privadas e, por fim, o setor público (UPAs/UBS).", font: FONT, size: 22 })]),
-  note("Por que esse beachhead e não “hospitais” ou “público” direto: a cooperativa entrega liquidez dos dois lados no dia 1 (demanda + oferta) e um campeão interno com capital. Hospitais privados têm venda consultiva mais longa; o setor público exige licitação e ciclos longos — ambos são expansão, não entrada."),
-  H2("Personas"),
-  num("Coordenador(a) de escala da cooperativa (comprador/usuário-chave): vive apagando incêndio de plantão descoberto. Ganha automação e previsibilidade."),
-  num("Diretor(a) financeiro/operações (decisor econômico): quer visibilidade de margem, redução de custo operacional e conformidade."),
-  num("Médico/profissional cooperado (oferta): quer ofertas relevantes, sem burocracia e com pagamento transparente, pelo WhatsApp."),
-  num("Gestor público/OSS de saúde (expansão): precisa cobrir UPAs/UBS com rastreabilidade para prestação de contas."),
-];
-
-// ---------------------------------------------------------------- 5. PRODUTO
+// ---------------------------------------------------------------- 5. MERCADO
 const s5 = [
-  H1("5. Produto e funcionalidades"),
-  P([new TextRun({ text: "Stack técnica: ", bold: true, font: FONT, size: 22, color: NAVY }),
-     new TextRun({ text: "Backend NestJS + Prisma + PostgreSQL; Frontend Next.js (App Router) + Tailwind; IA via Anthropic (modelo Haiku para custo marginal baixo); mensageria via Twilio/WhatsApp/Meta/Zenvia; auth por cookie httpOnly; deploy em Docker. Arquitetura modular (~20 módulos) e API REST padronizada.", font: FONT, size: 22 })]),
-  H2("Módulos funcionais (implementados e testados — 32/32 testes de API, 14/14 de regras de negócio)"),
-  table([2700, 6326], ["Módulo", "O que faz"], [
-    ["Matching", "Pontua profissional × vaga (LOW/MEDIUM/HIGH), detecta conflito de agenda e elegibilidade, lista razões"],
-    ["Vagas & Contratos", "Pipeline completo de plantão (avulso, recorrente, cobertura, mensal, pool de reserva)"],
-    ["Candidaturas → Alocações → Escala", "Aprovação gera alocação; controle de presença/ausência/atraso"],
-    ["IA conversacional", "Aborda e negocia plantões via WhatsApp, com tool calls e handoff humano para ações críticas"],
-    ["Financeiro", "Recebíveis (cliente/órgão público), pagáveis (profissional), taxa de plataforma e margem"],
-    ["Credenciamento", "Conselhos, CBO, RQE, especialidades, documentos com validade e revisão"],
-    ["Auditoria & RBAC", "Trilha de toda mutação; perfis Admin/Manager/Operator/Viewer"],
-    ["White-label", "Branding por cliente (essencial para vender a cooperativas com marca própria)"],
-  ], { firstBold: true }),
-  spacer(100),
-  P([new TextRun({ text: "Maturidade: ", bold: true, font: FONT, size: 22, color: NAVY }),
-     new TextRun({ text: "MVP construído e testado internamente, pronto para o primeiro piloto. Lacunas para escala (no roadmap): multi-tenancy robusto, billing automatizado (gateway/split), observabilidade, testes de carga e ativação plena do agente de IA.", font: FONT, size: 22 })]),
-];
-
-// ---------------------------------------------------------------- 6. GTM
-const s6 = [
-  H1("6. Estratégia de marketing e vendas (Go-to-Market)"),
-  P([new TextRun({ text: "Fase 0 — Âncora (mês 0–6): ", bold: true, font: FONT, size: 22, color: NAVY }), new TextRun({ text: "fechar a cooperativa como investidor + cliente-âncora. Piloto em 1–2 unidades/especialidades, provando redução de tempo de preenchimento e de plantões descobertos. O case da âncora vira a principal peça de venda (co-marketing).", font: FONT, size: 22 })]),
-  P([new TextRun({ text: "Fase 1 — Densidade regional (mês 6–18): ", bold: true, font: FONT, size: 22, color: NAVY }), new TextRun({ text: "expandir dentro da âncora e abordar outras cooperativas de saúde do Nordeste. Canal: venda direta consultiva (founder-led → 1º comercial), indicação da âncora e eventos do setor cooperativista.", font: FONT, size: 22 })]),
-  P([new TextRun({ text: "Fase 2 — Novos segmentos (mês 18–36): ", bold: true, font: FONT, size: 22, color: NAVY }), new TextRun({ text: "hospitais e redes privadas do NE; piloto no setor público (UPAs/UBS via OSS); início de motor de inbound (conteúdo, SEO, indicações).", font: FONT, size: 22 })]),
-  H2("Canais de aquisição e CAC esperado"),
-  bullet("Indicação/rede de cooperativas (CAC mais baixo) — principal motor."),
-  bullet("Venda direta consultiva (founder-led → SDR/closer)."),
-  bullet("Marketing de conteúdo + eventos setoriais (médio prazo)."),
-  bullet("🔹 Aquisição de profissionais (oferta): CAC ≈ R$ 0 na âncora (55 mil cooperados pré-existentes) — vantagem competitiva central."),
-];
-
-// ---------------------------------------------------------------- 7. OPERAÇÃO
-const s7 = [
-  H1("7. Estrutura operacional e equipe"),
-  P("Hoje: fundador solo (bootstrap), produto construído. A rodada financia o time mínimo viável para operar e escalar."),
-  H2("Plano de contratação (uso da rodada)"),
-  table([2100, 3463, 3463], ["Fase", "Contratações", "Racional"], [
-    ["Imediato (mês 0–3)", "1 Eng. full-stack sênior · 1 Customer Success/Ops", "Hardening (multi-tenancy, billing) + onboarding da âncora e liquidez do marketplace"],
-    ["Mês 3–9", "+1 Eng. · 1 Comercial (founder-led → closer)", "Sustentar a âncora e abrir novas cooperativas"],
-    ["Mês 9–18", "+1 Eng./Dados · +1 CS · suporte", "Escala de IA/matching e múltiplos clientes"],
-    ["Contínuo (PJ/fracionado)", "Design, Financeiro/Contábil, Jurídico/Compliance", "Custo variável até justificar CLT"],
+  H1("5. Análise de mercado"),
+  note("A análise de mercado embasa a tese ofensiva (upside). A decisão de investimento da Coaph não depende dela."),
+  P("O Brasil tem ~562 mil médicos ativos (CFM, 2024) e 2,5+ milhões de profissionais de saúde. O preenchimento de plantões é majoritariamente manual (WhatsApp, planilhas, agências, cooperativas com pouca tecnologia)."),
+  H2("TAM / SAM / SOM (bottom-up)"),
+  note("🔹 GMV de plantões = nº de plantões/ano × ticket médio (R$ 1.300). Receita endereçável ≈ 10% do GMV."),
+  table([1500, 3526, 2000, 2000], ["Camada", "Definição", "GMV/ano", "Receita endereçável (≈10%)"], [
+    ["TAM", "GMV de plantões/escalas de saúde no Brasil", "🔹 R$ 15–20 bi", "🔹 R$ 1,5–2,0 bi"],
+    ["SAM", "Nordeste + cooperativas/hospitais/público", "🔹 R$ 3–4 bi", "🔹 R$ 300–450 mi"],
+    ["SOM (3–5 anos)", "CE + cooperativas adjacentes do NE", "🔹 R$ 150–300 mi", "🔹 R$ 15–30 mi"],
   ], { firstBold: true }),
   spacer(80),
-  P("Estrutura jurídica/operacional: PJ enxuta, contabilidade terceirizada, jurídico/LGPD e compliance regulatório (dados de saúde) como prioridade desde o início. O founder acumula CEO + Produto na fase pre-seed."),
+  lead("Concorrência: ", "o concorrente nº 1 é o processo manual (WhatsApp + planilhas + prepostos) — exatamente o que a tese defensiva ataca. Software hospitalar (Tasy/MV) e gestão de clínicas (iClinic/Feegow) não fazem matching+IA+marketplace de plantão. Comps internacionais (Nomad, Trusted, Medely, Patchwork) validam o modelo, mas não operam no Brasil."),
 ];
 
-// ---------------------------------------------------------------- 8. FINANCEIRO
-const m = (n) => n.toLocaleString("pt-BR");
-const s8 = [
-  H1("8. Plano financeiro SaaS"),
-  note("🔹 Premissas-base (a validar no piloto): ticket médio por plantão R$ 1.300; take-rate 5% (cons.) / 7% (real.) / 8% (otim.); ARPA SaaS ~R$ 4.000/conta/mês; margem bruta blended 62%/68%/72% (líquida de meios de pagamento ~1,8% do GMV, WhatsApp ~R$0,30/conversa e infra/IA); encargos trabalhistas ≈ 1,75× salário bruto."),
-  H2("8.1 Drivers de volume (cenário realista)"),
-  table([3626, 1800, 1800, 1800], ["Driver", "Ano 1", "Ano 2", "Ano 3"], [
-    ["Plantões intermediados (média/mês)", "800", "4.500", "12.000"],
-    ["Plantões/ano", "9.600", "54.000", "144.000"],
-    [{ v: "GMV/ano", bold: true }, { v: "R$ 12,5 mi", bold: true }, { v: "R$ 70,2 mi", bold: true }, { v: "R$ 187,2 mi", bold: true }],
-    ["Contas SaaS pagantes (saída do ano)", "~10", "~25", "~55"],
-    ["MRR (saída do ano)", "R$ 35 mil", "R$ 150 mil", "R$ 420 mil"],
+// ---------------------------------------------------------------- 6. PÚBLICO
+const s6 = [
+  H1("6. Público-alvo e personas"),
+  lead("ICP de entrada: ", "a Coaph, como design partner, investidor e primeiro cliente. Expansão (upside): outras cooperativas do NE → hospitais/redes privadas → setor público."),
+  H2("Personas"),
+  num("Diretoria da Coaph (decisor econômico): quer reduzir o custo de R$ 240 mil/mês e ganhar controle/conformidade."),
+  num("Coordenador(a) de escala (usuário-chave): vive apagando incêndio de plantão descoberto."),
+  num("Preposto/operador (parte impactada): tarefas automatizadas — exige gestão de mudança (ver §13)."),
+  num("Médico/profissional cooperado (oferta): quer ofertas relevantes via WhatsApp, sem burocracia."),
+];
+
+// ---------------------------------------------------------------- 7. PRODUTO
+const s7 = [
+  H1("7. Produto e funcionalidades"),
+  lead("Stack técnica: ", "NestJS + Prisma + PostgreSQL; Next.js + Tailwind; IA via Anthropic (Haiku); mensageria Twilio/WhatsApp/Meta/Zenvia; Docker. ~20 módulos, API REST padronizada."),
+  H2("Módulos funcionais (testados — 32/32 testes de API, 14/14 regras de negócio)"),
+  table([2700, 6326], ["Módulo", "O que faz"], [
+    ["Matching", "Pontua profissional × vaga, detecta conflito de agenda e elegibilidade"],
+    ["Vagas & Contratos", "Pipeline de plantão (avulso, recorrente, cobertura, pool)"],
+    ["Candidaturas → Alocações → Escala", "Aprovação gera alocação; controle de presença/no-show"],
+    ["IA conversacional", "Aborda e negocia plantões via WhatsApp; handoff humano em ações críticas"],
+    ["Financeiro", "Recebíveis, pagáveis, taxa de plataforma e margem"],
+    ["Credenciamento", "Conselhos, CBO, RQE, documentos com validade"],
+    ["Auditoria & RBAC", "Trilha de mutações; perfis de acesso"],
+    ["White-label", "Branding por cliente"],
   ], { firstBold: true }),
-  H2("8.2 Receita — 3 cenários (receita líquida = take-rate + SaaS)"),
+  spacer(80),
+  lead("Maturidade: ", "MVP construído e testado internamente, pronto para o piloto. Lacunas para escala (roadmap): multi-tenancy robusto, billing/split automatizado, observabilidade, testes de carga, ativação plena da IA."),
+];
+
+// ---------------------------------------------------------------- 8. GTM
+const s8 = [
+  H1("8. Estratégia de marketing e vendas (Go-to-Market)"),
+  lead("Fase 0 — Coaph (mês 0–6): ", "implantar na Coaph como cliente-âncora; piloto com metas de redução de custo operacional (não só de uso). O case vira a principal peça de venda."),
+  lead("Fase 1 — Densidade regional (mês 6–18): ", "outras cooperativas de saúde do NE, via indicação da âncora e eventos do setor cooperativista."),
+  lead("Fase 2 — Novos segmentos (mês 18–36): ", "hospitais/redes privadas do NE; piloto no setor público."),
+  spacer(40),
+  lead("Sobre a base de 55 mil cooperados: ", "é uma vantagem de oferta uma vez operacionalizada — não liquidez automática. A adoção pelos profissionais e o redesenho do processo são pré-condições."),
+];
+
+// ---------------------------------------------------------------- 9. OPERAÇÃO
+const s9 = [
+  H1("9. Estrutura operacional e equipe"),
+  P("Hoje: fundador solo (bootstrap), produto construído. A rodada (trancheada) financia o time mínimo:"),
+  table([2100, 3463, 3463], ["Fase", "Contratações", "Racional"], [
+    ["Imediato (mês 0–3)", "1 Eng. sênior · 1 CS/Ops", "Hardening + implantação na Coaph"],
+    ["Mês 3–9", "+1 Eng. · 1 Comercial", "Sustentar a Coaph e abrir cooperativas"],
+    ["Mês 9–18", "+1 Eng./Dados · +1 CS", "Escala de IA/matching"],
+    ["Contínuo (PJ)", "Design, Contábil, Jurídico/LGPD", "Custo variável"],
+  ], { firstBold: true }),
+];
+
+// ---------------------------------------------------------------- 10. FINANCEIRO (ofensiva)
+const s10 = [
+  H1("10. Plano financeiro do HealthMatch (tese ofensiva)"),
+  note("⚠️ Esta seção é o cenário de upside (HealthMatch como empresa). A defesa do investimento pela Coaph não depende destes números — ela se sustenta no §3. Não somar a economia da Coaph (§3) à receita aqui."),
+  P("🔹 Premissas: ticket/plantão R$ 1.300; take-rate 5/7/8%; ARPA SaaS ~R$ 4.000/mês; margem bruta blended ~68%."),
+  H2("Receita líquida — 3 cenários (SaaS + take-rate)"),
   table([3026, 2000, 2000, 2000], ["Cenário", "Ano 1", "Ano 2", "Ano 3"], [
     ["Conservador", "R$ 0,43 mi", "R$ 2,26 mi", "R$ 6,38 mi"],
     [{ v: "Realista", bold: true }, { v: "R$ 1,09 mi", bold: true }, { v: "R$ 5,99 mi", bold: true }, { v: "R$ 16,5 mi", bold: true }],
     ["Otimista", "R$ 1,98 mi", "R$ 11,9 mi", "R$ 33,3 mi"],
-    [{ v: "GMV (Ano 3)", color: "555555" }, { v: "—", color: "555555" }, { v: "—", color: "555555" }, { v: "R$ 187,2 mi", color: "555555" }],
   ], { firstBold: true }),
-  H2("8.3 DRE resumida (cenário realista, R$ mil)"),
+  H2("DRE resumida (realista, R$ mil)"),
   table([3026, 2000, 2000, 2000], ["Linha", "Ano 1", "Ano 2", "Ano 3"], [
     ["Receita líquida", "1.090", "5.990", "16.500"],
-    ["(–) COGS", "(350)", "(1.917)", "(5.280)"],
-    [{ v: "Lucro bruto (≈68%)", bold: true }, { v: "740", bold: true }, { v: "4.073", bold: true }, { v: "11.220", bold: true }],
-    ["Pessoal", "(1.100)", "(2.400)", "(4.800)"],
-    ["Marketing & Vendas", "(150)", "(600)", "(1.800)"],
-    ["Infra / ferramentas", "(120)", "(300)", "(700)"],
-    ["G&A / jurídico / contábil", "(120)", "(300)", "(700)"],
-    [{ v: "Opex total", bold: true }, { v: "(1.490)", bold: true }, { v: "(3.600)", bold: true }, { v: "(8.000)", bold: true }],
+    [{ v: "Lucro bruto (~68%)", bold: true }, { v: "740", bold: true }, { v: "4.073", bold: true }, { v: "11.220", bold: true }],
+    ["Opex total", "(1.490)", "(3.600)", "(8.000)"],
     [{ v: "EBITDA", bold: true, fill: LIGHT }, { v: "(750)", bold: true, fill: LIGHT }, { v: "+473", bold: true, fill: LIGHT }, { v: "+3.220", bold: true, fill: LIGHT }],
-    ["Margem EBITDA", "–69%", "+8%", "+20%"],
   ], { firstBold: true }),
   spacer(60),
-  P([new TextRun({ text: "Break-even operacional (realista): ~mês 20–22 ", bold: true, font: FONT, size: 22, color: NAVY }),
-     new TextRun({ text: "(durante o Ano 2). Conservador: ~mês 30+ (pode exigir ponte). Otimista: ~mês 14–16.", font: FONT, size: 22 })]),
-  H2("8.4 Métricas-chave SaaS (visão SaaS-only, conservadora)"),
-  note("🔹 Reporto a visão SaaS-only para ser defensável em pré-lançamento. A economia blended (SaaS + take-rate por cliente) é materialmente superior, mas limitada por liquidez, não por CAC."),
-  table([2926, 2200, 1900, 2000], ["Métrica", "Valor", "Benchmark BR", "Leitura"], [
-    ["ARPA", "R$ 4.000/mês", "—", "Mix institucional"],
-    ["CAC (conta institucional)", "R$ 15.000", "—", "Venda consultiva B2B saúde"],
-    ["Churn anual (logo)", "12%", "10–15% bom", "Alto switching cost"],
-    ["LTV (36m capado)", "~R$ 115 mil", "—", "Conservador (sem take)"],
-    [{ v: "LTV / CAC", bold: true }, { v: "~7,7×", bold: true }, ">3 saudável", "Forte; sobe no blended"],
-    [{ v: "Payback de CAC", bold: true }, { v: "~4,7 meses", bold: true }, "<12m saudável", "Excelente"],
-    ["CAC de profissionais", "≈ R$ 0 na âncora", "—", "Vantagem estrutural"],
-  ], { firstBold: true, hsize: 17 }),
-  H2("8.5 Necessidade de investimento (o “ask”)"),
-  P([new TextRun({ text: "Captação pre-seed: R$ 1,5 milhão ", bold: true, font: FONT, size: 22, color: NAVY }),
-     new TextRun({ text: "para ~20 meses de runway, cruzando o vale de burn do Ano 1 (~R$ 750 mil) com folga até o break-even.", font: FONT, size: 22 })]),
-  table([3563, 1200, 1800, 2463], ["Destino", "%", "Valor", "Para quê"], [
-    ["Produto & Engenharia", "55%", "R$ 825 mil", "Eng, multi-tenancy, billing/split, IA em produção"],
-    ["GTM (Vendas & Marketing)", "18%", "R$ 270 mil", "CS/Ops, comercial, co-marketing"],
-    ["Infra & COGS iniciais", "10%", "R$ 150 mil", "Cloud, WhatsApp, meios de pagamento"],
-    ["Jurídico/Compliance/LGPD", "9%", "R$ 135 mil", "Dados de saúde, contratos, IP"],
-    ["Reserva/contingência", "8%", "R$ 120 mil", "Buffer"],
-  ], { firstBold: true, hsize: 17 }),
-  spacer(80),
-  note("Recomendação estratégica: estruturar a rodada com a cooperativa-âncora como investidora estratégica (“smart money”) — capital + primeiro contrato + oferta de 55 mil profissionais + porta para outras cooperativas. Idealmente um SAFE / nota conversível com teto (sugiro discutir a faixa de R$ 6–10 mi) e desconto, evitando travar valuation cedo."),
+  lead("Métricas SaaS (visão SaaS-only, conservadora): ", "ARPA R$ 4.000/mês · CAC R$ 15.000 · churn 12%/ano · LTV/CAC ~7,7× · payback de CAC ~4,7 meses. Break-even ofensivo ~mês 20–22."),
+  note("Comparação das duas lentes: a tese defensiva (§3) entrega payback em ~12,5 meses (realista) com um único cliente. A tese ofensiva precisa de tração externa para entregar os R$ 16,5 mi de receita no Ano 3. A primeira é a âncora da decisão; a segunda é o prêmio."),
 ];
 
-// ---------------------------------------------------------------- 9. SWOT
-const swotCell = (title, items, fill) => cell([title, ...items], 4513, { fill, bullets: false, bold: false });
-function swotBox(title, color, items) {
-  const paras = [new Paragraph({ spacing: { after: 60 }, children: [new TextRun({ text: title, bold: true, color: "FFFFFF", font: FONT, size: 20 })] })];
-  items.forEach((t) => paras.push(new Paragraph({ numbering: { reference: "tb", level: 0 }, spacing: { after: 30, line: 240 },
-    children: [new TextRun({ text: t, font: FONT, size: 18 })] })));
-  return new TableCell({ width: { size: 4513, type: WidthType.DXA }, borders, margins: cellMargins, verticalAlign: VerticalAlign.TOP,
-    children: paras });
-}
-const headCell = (t, fill) => new TableCell({ width: { size: 4513, type: WidthType.DXA }, borders, margins: cellMargins,
-  shading: { fill, type: ShadingType.CLEAR }, children: [new Paragraph({ children: [new TextRun({ text: t, bold: true, color: "FFFFFF", font: FONT, size: 20 })] })] });
-const s9 = [
-  H1("9. Análise SWOT"),
+// ---------------------------------------------------------------- 11. KPIs
+const s11 = [
+  H1("11. KPIs do piloto Coaph"),
+  P("O piloto é desenhado para provar a economia operacional, não apenas o uso do software. Métricas medidas antes (baseline) e depois:"),
+  table([3000, 3526, 2500], ["KPI", "Como medir", "Meta no piloto"], [
+    ["Custo mensal com prepostos", "Folha + encargos da operação manual", "↓ –25% a –50%"],
+    ["Horas manuais eliminadas/mês", "Time-tracking da equipe operacional", "↓ progressiva"],
+    ["% de plantões preenchidos sem intervenção humana", "Logs da plataforma", "↑ a cada ciclo"],
+    ["Tempo médio de preenchimento de plantão", "Abertura → confirmação", "↓ de horas p/ minutos"],
+    ["Taxa de aceite via WhatsApp/IA", "Aceites IA ÷ ofertas", "Baseline + crescer"],
+    ["% de confirmações automatizadas", "Confirmações sem operador", "↑"],
+    ["Redução de retrabalho operacional", "Reaberturas/correções de escala", "↓"],
+    ["Redução de erros de escala", "Conflitos/no-shows não detectados", "↓"],
+    ["Profissionais ativados", "Cadastros ativos", "Crescimento"],
+    ["Plantões processados", "Volume pela plataforma", "Crescimento"],
+    ["NPS dos coordenadores", "Pesquisa periódica", "≥ alvo acordado"],
+    [{ v: "Economia operacional mensal", bold: true }, { v: "Estimada × realizada", bold: true }, { v: "Gatilho das tranches", bold: true }],
+  ], { firstBold: true, hsize: 17 }),
+];
+
+// ---------------------------------------------------------------- 12. SWOT
+const s12 = [
+  H1("12. Análise SWOT"),
   new Table({ width: { size: 9026, type: WidthType.DXA }, columnWidths: [4513, 4513], borders, rows: [
-    new TableRow({ children: [headCell("Forças", "1E7A34"), headCell("Fraquezas", "B45309")] }),
+    new TableRow({ children: [headCell("Forças", GREEN), headCell("Fraquezas", AMBER)] }),
     new TableRow({ children: [
-      new TableCell({ width: { size: 4513, type: WidthType.DXA }, borders, margins: cellMargins, verticalAlign: VerticalAlign.TOP, children:
-        ["Produto construído e testado, pronto para piloto","Canal de distribuição único (rede de cooperativas)","Liquidez de oferta no dia 1 (55k cooperados)","IA + matching + financeiro num só lugar","CAC de oferta ≈ 0"].map((t)=>new Paragraph({ numbering:{reference:"tb",level:0}, spacing:{after:30,line:240}, children:[new TextRun({text:t,font:FONT,size:18})]})) }),
-      new TableCell({ width: { size: 4513, type: WidthType.DXA }, borders, margins: cellMargins, verticalAlign: VerticalAlign.TOP, children:
-        ["Fundador solo; sem time formado","Sem receita/tração comercial ainda","Dependência inicial de um único cliente-âncora","Multi-tenancy/billing ainda a construir","Produto ainda sem validação com clientes reais"].map((t)=>new Paragraph({ numbering:{reference:"tb",level:0}, spacing:{after:30,line:240}, children:[new TextRun({text:t,font:FONT,size:18})]})) }),
+      swotCol(["Tese defensiva ataca custo concreto (R$ 240 mil/mês)", "Produto construído e testado, pronto para piloto", "Coaph como investidor-cliente âncora alinhado", "IA + matching + financeiro num só lugar", "Acesso à base de 55k cooperados (via Coaph)"]),
+      swotCol(["Fundador solo; sem time formado", "Sem receita/tração externa ainda", "Forte dependência da Coaph", "Economia só se realiza com redesenho de processo", "Multi-tenancy/billing ainda a construir"]),
     ]}),
-    new TableRow({ children: [headCell("Oportunidades", "1F6FB2"), headCell("Ameaças", "9B1C1C")] }),
+    new TableRow({ children: [headCell("Oportunidades", ACCENT), headCell("Ameaças", "9B1C1C")] }),
     new TableRow({ children: [
-      new TableCell({ width: { size: 4513, type: WidthType.DXA }, borders, margins: cellMargins, verticalAlign: VerticalAlign.TOP, children:
-        ["Mercado enorme e manual (R$ bi em GMV)","Expansão para o setor público (SUS/UPAs)","Sistema cooperativista nacional como esteira","IA reduz custo operacional drasticamente"].map((t)=>new Paragraph({ numbering:{reference:"tb",level:0}, spacing:{after:30,line:240}, children:[new TextRun({text:t,font:FONT,size:18})]})) }),
-      new TableCell({ width: { size: 4513, type: WidthType.DXA }, borders, margins: cellMargins, verticalAlign: VerticalAlign.TOP, children:
-        ["Cooperativa/cliente decidir construir in-house","Mudança regulatória (CLT × PJ, LGPD)","Players internacionais entrarem no Brasil","Concentração: perder a âncora seria crítico"].map((t)=>new Paragraph({ numbering:{reference:"tb",level:0}, spacing:{after:30,line:240}, children:[new TextRun({text:t,font:FONT,size:18})]})) }),
+      swotCol(["Replicar o case para outras cooperativas", "Expansão para hospitais e setor público", "Sistema cooperativista nacional como esteira", "IA reduz custo operacional drasticamente"]),
+      swotCol(["Coaph optar por construir/contratar in-house", "Resistência interna de prepostos/coordenadores", "Economia não se materializar no % esperado", "Mudança regulatória (CLT × PJ, LGPD)"]),
     ]}),
   ]}),
 ];
 
-// ---------------------------------------------------------------- 10. RISCOS
-const s10 = [
-  H1("10. Riscos e plano de mitigação"),
-  table([3000, 1800, 4226], ["Risco", "Prob./Impacto", "Mitigação"], [
-    ["Concentração na âncora", "Médio/Alto", "Usar o piloto para abrir 2–3 cooperativas no Ano 1; contrato plurianual com a âncora"],
-    ["Product-market fit ainda não comprovado", "Médio/Alto", "Piloto rápido com a âncora, com métricas de sucesso definidas (tempo de preenchimento, % de plantões descobertos)"],
-    ["Regulatório/trabalhista (PJ × CLT)", "Médio/Alto", "Jurídico especializado; posicionar como ferramenta de gestão da cooperativa, que detém o vínculo"],
-    ["LGPD / dados sensíveis de saúde", "Médio/Alto", "Compliance desde o início; criptografia, RBAC, DPO terceirizado"],
-    ["Meios de pagamento erodirem o take", "Médio/Médio", "Negociar split/escrow; opção “track-only” reduz COGS"],
-    ["Execução com time pequeno", "Médio/Médio", "Contratações-chave logo na rodada; founder foca em produto + âncora"],
-    ["Adoção pelos profissionais (oferta)", "Baixo/Médio", "IA via WhatsApp reduz fricção; âncora já tem relacionamento com cooperados"],
-  ], { firstBold: true }),
+// ---------------------------------------------------------------- 13. RISCOS
+const s13 = [
+  H1("13. Riscos e plano de mitigação"),
+  table([3200, 1500, 4326], ["Risco", "Prob./Imp.", "Mitigação"], [
+    [{ v: "Virar software customizado p/ a Coaph, não startup escalável", bold: true }, "Médio/Alto", "Arquitetura multi-tenant desde o início; contrato separa licença de investimento; roadmap de produto, não de consultoria"],
+    [{ v: "Dependência excessiva da Coaph", bold: true }, "Alto/Alto", "Abrir 1–2 cooperativas no Ano 1; contrato plurianual; investimento trancheado dilui o risco no tempo"],
+    [{ v: "Economia não se materializar no % esperado", bold: true }, "Médio/Alto", "Base conservadora de 25%; piloto com baseline e metas; tranches liberadas só contra economia comprovada"],
+    [{ v: "Resistência interna (prepostos, coordenadores)", bold: true }, "Médio/Alto", "Gestão de mudança; envolver coordenadores como co-desenhadores; comunicar realocação, não só corte"],
+    [{ v: "Automação parcial exigir manter equipe humana", bold: true }, "Médio/Médio", "Implantação por fases; medir horas eliminadas, não uso; metas realistas (25–50%, não 100%)"],
+    [{ v: "Substituir tarefas sem reduzir custo real", bold: true }, "Médio/Alto", "Redesenho operacional explícito no escopo; KPI = economia realizada, não teórica"],
+    ["Regulatório/trabalhista (PJ × CLT)", "Médio/Alto", "Jurídico especializado; plataforma de gestão da cooperativa, que detém o vínculo"],
+    ["LGPD / dados sensíveis de saúde", "Médio/Alto", "Compliance desde o início; criptografia, RBAC, DPO"],
+    ["Execução com time pequeno", "Médio/Médio", "Contratações-chave na Tranche 1; founder foca em produto + Coaph"],
+  ], { firstBold: true, hsize: 17 }),
+  spacer(80),
+  lead("Princípios de mitigação: ", "piloto com metas objetivas · implantação por fases · KPIs de redução de horas manuais · contrato comercial separado do investimento · tranches condicionadas à economia gerada · comitê mensal Coaph + HealthMatch para acompanhar o ROI."),
 ];
 
-// ---------------------------------------------------------------- 11. ROADMAP
-const s11 = [
-  H1("11. Roadmap e próximos passos (12–36 meses)"),
-  H2("0–6 meses — Fundação & Âncora"),
-  bullet("Fechar rodada pre-seed (com a cooperativa como investidora estratégica)."),
-  bullet("Contratar Eng. sênior + CS/Ops. Blindar IP/LGPD."),
-  bullet("Hardening: multi-tenancy + billing/split + IA em produção."),
-  bullet("Piloto na âncora → métricas: tempo de preenchimento, % plantões descobertos, NPS do coordenador."),
-  H2("6–18 meses — Densidade regional"),
-  bullet("Expandir dentro da âncora; abrir 2–3 cooperativas do NE."),
-  bullet("1º comercial; co-marketing do case."),
-  bullet("Meta: MRR ~R$ 150 mil e GMV ~R$ 70 mi/ano (realista) → break-even ~mês 20–22."),
-  H2("18–36 meses — Expansão de segmento"),
-  bullet("Hospitais/redes privadas do NE; piloto no setor público (UPAs/UBS)."),
-  bullet("Motor de inbound (conteúdo/SEO) e indicações."),
-  bullet("Preparar rodada seed (com tração) para expansão nacional via sistema cooperativista."),
-  bullet("Meta: receita líquida ~R$ 16,5 mi e EBITDA positivo (~20%)."),
-  spacer(160),
-  H2("Premissas críticas a validar no piloto"),
-  num("Ticket médio do plantão e take-rate aceito pela cooperativa (🔹 R$ 1.300 / 7%)."),
-  num("Volume real de plantões que migram para a plataforma."),
-  num("Disposição da âncora a pagar SaaS e fee (modelo híbrido) — ou se concentra em um."),
-  num("Custo efetivo de meios de pagamento (define operar o fluxo financeiro ou só “track-only”)."),
-  num("Churn e expansão reais entre cooperativas."),
+// ---------------------------------------------------------------- 14. RECOMENDAÇÃO
+const s14 = [
+  H1("14. Recomendação de investimento"),
+  P([new TextRun({ text: "A Coaph deve investir somente se TODAS as condições abaixo forem atendidas:", bold: true, font: FONT, size: 22, color: NAVY })]),
+  num("Assinar contrato como cliente-âncora (licença/serviço), separado do instrumento de investimento."),
+  num("O investimento for trancheado (não desembolso único)."),
+  num("A liberação de cada tranche estiver vinculada a metas reais de adoção e economia operacional."),
+  num("Existirem métricas de sucesso claras (os KPIs do §11) e um comitê mensal de acompanhamento."),
+  H2("Estrutura de tranches sugerida (total R$ 1,5 mi)"),
+  table([1700, 1600, 3026, 2700], ["Tranche", "Valor", "Gatilho de liberação", "Uso"], [
+    [{ v: "Tranche 1", bold: true }, "R$ 300–500 mil", "Assinatura do contrato + início", "Piloto, implantação, hardening, LGPD, integrações"],
+    [{ v: "Tranche 2", bold: true }, "~R$ 500 mil", "Economia comprovada ≥ R$ 50 mil/mês", "Expansão de uso na Coaph; 1as contratações"],
+    [{ v: "Tranche 3", bold: true }, "~R$ 600 mil", "Economia ≥ R$ 100 mil/mês (ou volume equivalente)", "Escala interna + preparo da expansão externa"],
+  ], { firstBold: true, hsize: 17 }),
+  spacer(80),
+  lead("Por que assim: ", "o trancheamento converte uma aposta de R$ 1,5 mi num investimento escalonado pelo resultado — a Coaph só compromete capital adicional após ver a economia real. Alinha incentivos, reduz o risco de software de gaveta e mantém o foco em valor mensurável."),
 ];
 
-const children = [...cover, ...toc, ...s1, ...s2, ...s3, ...s4, ...s5, ...s6, ...s7, ...s8, ...s9, ...s10, ...s11];
+// ---------------------------------------------------------------- 15. ROADMAP
+const s15 = [
+  H1("15. Roadmap e próximos passos"),
+  H2("0–6 meses — Implantação na Coaph (Tranche 1)"),
+  bullet("Assinar contrato (cliente) + instrumento de investimento (tranches)."),
+  bullet("Hardening (multi-tenancy, billing, LGPD) + integrações."),
+  bullet("Piloto com baseline e metas de economia; comitê mensal de ROI."),
+  H2("6–18 meses — Provar economia e abrir o 2º cliente (Tranches 2–3)"),
+  bullet("Atingir ≥ R$ 50 mil/mês e depois ≥ R$ 100 mil/mês de economia."),
+  bullet("Abrir 1–2 cooperativas do NE com o case da Coaph."),
+  H2("18–36 meses — Escala (tese ofensiva)"),
+  bullet("Hospitais/redes privadas; piloto no setor público."),
+  bullet("Preparar rodada seed com tração real."),
+  spacer(120),
+  note("Resumo da decisão: a Coaph investe pela economia operacional (defensiva); a escala externa é upside. Mesmo no cenário conservador (25%), o capital se paga em ~2 anos só com a economia interna."),
+];
+
+const children = [...cover, ...toc, ...s1, ...s2, ...s3, ...s4, ...s5, ...s6, ...s7, ...s8, ...s9, ...s10, ...s11, ...s12, ...s13, ...s14, ...s15];
 
 const doc = new Document({
   creator: "HealthMatch", title: "HealthMatch — Business Plan",
@@ -410,20 +382,16 @@ const doc = new Document({
     paragraphStyles: [
       { id: "Heading1", name: "Heading 1", basedOn: "Normal", next: "Normal", quickFormat: true,
         run: { size: 30, bold: true, font: FONT, color: NAVY },
-        paragraph: { spacing: { before: 320, after: 160 }, outlineLevel: 0,
-          border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: BLUE, space: 4 } } } },
+        paragraph: { spacing: { before: 320, after: 160 }, outlineLevel: 0, border: { bottom: { style: BorderStyle.SINGLE, size: 8, color: BLUE, space: 4 } } } },
       { id: "Heading2", name: "Heading 2", basedOn: "Normal", next: "Normal", quickFormat: true,
         run: { size: 24, bold: true, font: FONT, color: ACCENT },
         paragraph: { spacing: { before: 200, after: 100 }, outlineLevel: 1 } },
     ],
   },
   numbering: { config: [
-    { reference: "b", levels: [{ level: 0, format: LevelFormat.BULLET, text: "•", alignment: AlignmentType.LEFT,
-      style: { paragraph: { indent: { left: 460, hanging: 260 } } } }] },
-    { reference: "tb", levels: [{ level: 0, format: LevelFormat.BULLET, text: "•", alignment: AlignmentType.LEFT,
-      style: { paragraph: { indent: { left: 300, hanging: 220 } } } }] },
-    { reference: "n", levels: [{ level: 0, format: LevelFormat.DECIMAL, text: "%1.", alignment: AlignmentType.LEFT,
-      style: { paragraph: { indent: { left: 460, hanging: 260 } } } }] },
+    { reference: "b", levels: [{ level: 0, format: LevelFormat.BULLET, text: "•", alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 460, hanging: 260 } } } }] },
+    { reference: "tb", levels: [{ level: 0, format: LevelFormat.BULLET, text: "•", alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 300, hanging: 220 } } } }] },
+    { reference: "n", levels: [{ level: 0, format: LevelFormat.DECIMAL, text: "%1.", alignment: AlignmentType.LEFT, style: { paragraph: { indent: { left: 460, hanging: 260 } } } }] },
   ] },
   sections: [{
     properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
