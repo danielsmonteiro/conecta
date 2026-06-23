@@ -1,0 +1,821 @@
+// Schema reconstruído a partir dos contratos de API capturados do HealthMatch.
+// IDs em cuid() para espelhar a produção. Ajuste tipos/relações conforme validar.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ----------------------------- Autenticação ----------------------------- 
+enum Role {
+  ADMIN
+  MANAGER
+  OPERATOR
+  VIEWER
+}
+
+model User {
+  id           String       @id @default(cuid())
+  email        String       @unique
+  passwordHash String
+  fullName     String
+  role         Role         @default(OPERATOR)
+  profile      UserProfile?
+  refreshTokens RefreshToken[]
+  auditLogs    AuditLog[]
+  assignedConversations Conversation[]
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+// Log de auditoria: toda mutação registra ator, ação e entidade afetada
+// (ex.: action="contracts.create" / "contracts.archive").
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  actorUser   User?    @relation(fields: [actorUserId], references: [id])
+  action      String
+  entityType  String?
+  entityId    String?
+  payload     Json?
+  createdAt   DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+model UserProfile {
+  id          String  @id @default(cuid())
+  userId      String  @unique
+  user        User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  displayName String
+  department  String?
+  jobTitle    String?
+  phone       String?
+}
+
+// Refresh tokens persistidos (modelo access curto + refresh observado em produção).
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+}
+
+// ------------------------------ Organizações ----------------------------- 
+enum OrganizationType {
+  HEALTH_CORPORATION
+  PUBLIC_AGENCY
+  PRIVATE_GROUP
+  PPP
+  NONPROFIT
+  OTHER
+}
+
+enum OrganizationStatus {
+  ACTIVE
+  INACTIVE
+  PENDING_SETUP
+  BLOCKED
+  ARCHIVED
+}
+
+model Organization {
+  id               String             @id @default(cuid())
+  name             String
+  legalName        String?
+  documentNumber   String?
+  type             OrganizationType
+  status           OrganizationStatus @default(ACTIVE)
+  description      String?
+  phone            String?
+  email            String?
+  mainContactName  String?
+  mainContactPhone String?
+  mainContactEmail String?
+  notes            String?
+  publicAgencies   PublicAgency[]
+  healthUnits      HealthUnit[]
+  contracts        Contract[]
+  vacancies        Vacancy[]
+  financialEntries FinancialEntry[]
+  deletedAt        DateTime?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+}
+
+// ------------------------------ Órgãos / Unidades ------------------------
+enum PublicAgencyType {
+  MUNICIPAL_GOVERNMENT
+  STATE_GOVERNMENT
+  FEDERAL_GOVERNMENT
+  AUTARCHY
+  FOUNDATION
+  PUBLIC_CONSORTIUM
+  OTHER
+}
+
+enum GovernmentSphere {
+  MUNICIPAL
+  STATE
+  FEDERAL
+}
+
+model PublicAgency {
+  id             String            @id @default(cuid())
+  name           String
+  acronym        String?
+  type           PublicAgencyType  @default(MUNICIPAL_GOVERNMENT)
+  sphere         GovernmentSphere  @default(MUNICIPAL)
+  document       String?
+  state          String?
+  city           String?
+  ibgeCode       String?
+  responsibleName String?
+  organizationId String?
+  organization   Organization?     @relation(fields: [organizationId], references: [id])
+  status         String            @default("ACTIVE")
+  contracts      Contract[]
+  vacancies      Vacancy[]
+  healthUnits    HealthUnit[]
+  financialEntries FinancialEntry[]
+  deletedAt      DateTime?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+}
+
+enum HealthUnitType {
+  CLINIC
+  HOSPITAL
+  UPA
+  BASIC_HEALTH_UNIT
+  DIAGNOSTIC_CENTER
+  OTHER
+}
+
+model HealthUnit {
+  id             String         @id @default(cuid())
+  name           String
+  legalName      String?
+  cnpj           String?
+  type           HealthUnitType @default(CLINIC)
+  status         String         @default("ACTIVE")
+  city           String?
+  state          String?
+  phone          String?
+  email          String?
+  mainContactName String?
+  requiresHumanApproval Boolean  @default(true)
+  organizationId String?
+  organization   Organization?  @relation(fields: [organizationId], references: [id])
+  publicAgencyId String?
+  publicAgency   PublicAgency?  @relation(fields: [publicAgencyId], references: [id])
+  contracts      Contract[]
+  vacancies      Vacancy[]
+  allocations    Allocation[]
+  financialEntries FinancialEntry[]
+  deletedAt      DateTime?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+}
+
+// ------------------------------ Especialidades / CBO --------------------- 
+model Specialty {
+  id                        String               @id @default(cuid())
+  name                      String
+  slug                      String?              @unique
+  description               String?
+  requiresRqe               Boolean              @default(false)
+  requiresSpecialistRegistry Boolean             @default(false)
+  active                    Boolean              @default(true)
+  professionals             HealthProfessional[] @relation("MainSpecialty")
+  vacancies                 Vacancy[]
+  deletedAt                 DateTime?
+  createdAt                 DateTime             @default(now())
+  updatedAt                 DateTime             @updatedAt
+}
+
+// Classificação Brasileira de Ocupações (CBO principal/complementares do profissional).
+model Cbo {
+  id                    String   @id @default(cuid())
+  coCbo                 String?
+  name                  String
+  normalizedName        String?
+  cbo2002Code           String?
+  availableForAssignment Boolean @default(true)
+  sourceProcedureCode   String?
+  code                  String?  // alias interno (compat)
+  cbo2002               String?  // alias interno (compat)
+  primaryOf             HealthProfessional[] @relation("PrimaryCbo")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @default(now()) @updatedAt
+}
+
+// ------------------------------ Profissionais ---------------------------- 
+enum Gender {
+  NOT_INFORMED
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum ProfessionalType {
+  PHYSICIAN
+  NURSE
+  NURSING_TECHNICIAN
+  PHYSIOTHERAPIST
+  PSYCHOLOGIST
+  NUTRITIONIST
+  DENTIST
+  PHARMACIST
+  SPEECH_THERAPIST
+  OCCUPATIONAL_THERAPIST
+  SOCIAL_WORKER
+  BIOMEDICAL
+  OTHER
+}
+
+enum Council {
+  CRM
+  COREN
+  CREFITO
+  CRP
+  CRN
+  CRF
+  CRO
+  CRBM
+  CREFONO
+  CRESS
+  OTHER
+}
+
+enum ProfessionalOrigin {
+  MANUAL
+  IMPORT
+  REFERRAL
+  SELF_SIGNUP
+}
+
+enum ProfessionalStatus {
+  INCOMPLETE
+  ACTIVE
+  INACTIVE
+  BLOCKED
+  ARCHIVED
+}
+
+enum CredentialStatus {
+  MISSING_DATA
+  MISSING_DOCUMENTS
+  PENDING_VALIDATION
+  VALID
+  EXPIRED
+  REJECTED
+}
+
+model HealthProfessional {
+  id                       String              @id @default(cuid())
+  fullName                 String
+  socialName               String?
+  cpf                      String?
+  birthDate                DateTime?
+  gender                   Gender              @default(NOT_INFORMED)
+  email                    String?
+  phone                    String?
+  whatsapp                 String
+  professionalType         ProfessionalType
+  council                  Council?
+  councilNumber            String?
+  councilState             String?
+  specialistRegistryNumber String?
+  crmNumber                String?
+  crmState                 String?
+  rqeNumber                String?
+  city                     String?
+  state                    String?
+  mainSpecialtyId          String?
+  mainSpecialty            Specialty?          @relation("MainSpecialty", fields: [mainSpecialtyId], references: [id])
+  primaryCboId             String?
+  primaryCbo               Cbo?                @relation("PrimaryCbo", fields: [primaryCboId], references: [id])
+  additionalCboIds         String[]            @default([])
+  status                   ProfessionalStatus  @default(INCOMPLETE)
+  credentialStatus         CredentialStatus    @default(MISSING_DOCUMENTS)
+  origin                   ProfessionalOrigin  @default(MANUAL)
+  isIndicated              Boolean             @default(false)
+  indicatedBy              String?
+  noShowCount              Int                 @default(0)
+  attendanceRate           Decimal?            @db.Decimal(5, 2)
+  notes                    String?
+  metrics                  ProfessionalMetrics?
+  applications             Application[]
+  allocations              Allocation[]
+  conversations            Conversation[]
+  channelIdentities        ChannelIdentity[]
+  financialEntries         FinancialEntry[]
+  deletedAt                DateTime?
+  createdAt                DateTime            @default(now())
+  updatedAt                DateTime            @updatedAt
+}
+
+// Registro 1:1 criado junto com o profissional (observado na captura).
+model ProfessionalMetrics {
+  id                         String             @id @default(cuid())
+  doctorId                   String             @unique
+  doctor                     HealthProfessional @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  applicationsCount          Int                @default(0)
+  allocationsCount           Int                @default(0)
+  completedAllocationsCount  Int                @default(0)
+  cancellationsCount         Int                @default(0)
+  lateCancellationsCount     Int                @default(0)
+}
+
+// ------------------------------ Contratos -------------------------------- 
+enum ContractType {
+  SINGLE_SHIFT
+  RECURRING_SHIFT
+  TEMPORARY_COVERAGE
+  MONTHLY_CONTRACT
+  ON_DEMAND
+  RESERVE_POOL
+  OTHER
+}
+
+enum ContractStatus {
+  DRAFT
+  PENDING_REVIEW
+  ACTIVE
+  SUSPENDED
+  COMPLETED
+  CANCELLED
+  ARCHIVED
+}
+
+enum BillingType {
+  DAILY
+  MONTHLY
+  PER_SHIFT
+  FIXED
+  PER_PROCEDURE
+  OTHER
+}
+
+model Contract {
+  id                    String         @id @default(cuid())
+  code                  String?        @unique
+  name                  String
+  type                  ContractType
+  status                ContractStatus @default(DRAFT)
+  organizationId        String?
+  organization          Organization?  @relation(fields: [organizationId], references: [id])
+  publicAgencyId        String?
+  publicAgency          PublicAgency?  @relation(fields: [publicAgencyId], references: [id])
+  healthUnitId          String
+  healthUnit            HealthUnit     @relation(fields: [healthUnitId], references: [id])
+  startsAt              DateTime
+  endsAt                DateTime?
+  requiredDoctors       Int            @default(1)
+  clientAmount          Decimal?       @db.Decimal(12, 2)
+  doctorAmount          Decimal?       @db.Decimal(12, 2)
+  currency              String         @default("BRL")
+  billingType           BillingType?
+  requiresHumanApproval Boolean        @default(true)
+  autoGenerateVacancies Boolean        @default(false)
+  notes                 String?
+  vacancies             Vacancy[]
+  allocations           Allocation[]
+  financialEntries      FinancialEntry[]
+  deletedAt             DateTime?
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+}
+
+// -------------------------------- Vagas ---------------------------------- 
+enum VacancyStatus {
+  DRAFT
+  OPEN
+  MATCHING
+  CONTACTING
+  RECEIVING_APPLICATIONS
+  PENDING_HUMAN_REVIEW
+  PARTIALLY_FILLED
+  FILLED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  EXPIRED
+  REPLACEMENT_NEEDED
+  ARCHIVED
+}
+
+enum VacancyPriority {
+  LOW
+  NORMAL
+  HIGH
+  URGENT
+}
+
+enum WorkModel {
+  ONSITE
+  REMOTE
+  HYBRID
+}
+
+enum ShiftType {
+  DAY
+  NIGHT
+  TWELVE_HOUR
+  TWENTY_FOUR_HOUR
+  CUSTOM
+}
+
+model Vacancy {
+  id                    String          @id @default(cuid())
+  code                  String?         @unique
+  contractId            String?
+  contract              Contract?       @relation(fields: [contractId], references: [id])
+  organizationId        String?
+  organization          Organization?   @relation(fields: [organizationId], references: [id])
+  publicAgencyId        String?
+  publicAgency          PublicAgency?   @relation(fields: [publicAgencyId], references: [id])
+  healthUnitId          String
+  healthUnit            HealthUnit      @relation(fields: [healthUnitId], references: [id])
+  specialtyId           String?
+  specialty             Specialty?      @relation(fields: [specialtyId], references: [id])
+  title                 String
+  description           String?
+  status                VacancyStatus   @default(DRAFT)
+  priority              VacancyPriority @default(NORMAL)
+  startsAt              DateTime
+  endsAt                DateTime
+  requiredDoctors       Int             @default(1)
+  filledDoctors         Int             @default(0)
+  shiftType             ShiftType?
+  workModel             WorkModel       @default(ONSITE)
+  clientAmount          Decimal?        @db.Decimal(12, 2)
+  doctorAmount          Decimal?        @db.Decimal(12, 2)
+  currency              String          @default("BRL")
+  requiresHumanApproval Boolean         @default(true)
+  autoStartCampaign     Boolean         @default(false)
+  notes                 String?
+  applications          Application[]
+  allocations           Allocation[]
+  conversations         Conversation[]
+  financialEntries      FinancialEntry[]
+  deletedAt             DateTime?
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+}
+
+// --------------------------- Candidaturas / Alocações -------------------- 
+enum ApplicationStatus {
+  PENDING
+  IN_REVIEW
+  APPROVED
+  REJECTED
+  WITHDRAWN
+}
+
+enum ApplicationOrigin {
+  MANUAL
+  AI
+  SELF_APPLICATION
+  IMPORT
+  MATCHING
+}
+
+enum MatchCategory {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+model Application {
+  id                  String             @id @default(cuid())
+  vacancyId           String
+  vacancy             Vacancy            @relation(fields: [vacancyId], references: [id], onDelete: Cascade)
+  professionalId      String
+  professional        HealthProfessional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  origin              ApplicationOrigin  @default(MANUAL)
+  status              ApplicationStatus  @default(PENDING)
+  matchScore          Float?
+  matchCategory       MatchCategory?
+  rejectionReason     String?
+  withdrawReason      String?
+  hasPendingDocuments Boolean            @default(false)
+  hasMissingData      Boolean            @default(false)
+  operationalConflict String?
+  notes               String?
+  allocations         Allocation[]
+  conversations       Conversation[]
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+}
+
+enum AllocationStatus {
+  PENDING
+  CONFIRMED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  REPLACEMENT_NEEDED
+}
+
+enum AttendanceStatus {
+  PENDING
+  PRESENT
+  ABSENT
+  LATE
+  PARTIAL
+}
+
+model Allocation {
+  id               String             @id @default(cuid())
+  vacancyId        String
+  vacancy          Vacancy            @relation(fields: [vacancyId], references: [id], onDelete: Cascade)
+  professionalId   String
+  professional     HealthProfessional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  applicationId    String?
+  application      Application?       @relation(fields: [applicationId], references: [id])
+  contractId       String?
+  contract         Contract?          @relation(fields: [contractId], references: [id])
+  healthUnitId     String?
+  healthUnit       HealthUnit?        @relation(fields: [healthUnitId], references: [id])
+  status           AllocationStatus   @default(PENDING)
+  attendanceStatus AttendanceStatus   @default(PENDING)
+  doctorAmount     Decimal?           @db.Decimal(12, 2)
+  clientAmount     Decimal?           @db.Decimal(12, 2)
+  confirmedByDoctor Boolean           @default(false)
+  confirmedAt      DateTime?
+  approvedAt       DateTime?
+  startsAt         DateTime?
+  endsAt           DateTime?
+  conversations    Conversation[]
+  financialEntries FinancialEntry[]
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+}
+
+// --------------------------- Conversas / Mensageria ----------------------
+
+enum ChannelType {
+  WHATSAPP
+  SMS
+  EMAIL
+  TELEGRAM
+  INTERNAL
+}
+
+enum ConversationStatus {
+  OPEN
+  AI_ACTIVE
+  WAITING_HUMAN
+  CLOSED
+}
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  QUEUED
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+model Conversation {
+  id                 String              @id @default(cuid())
+  professionalId     String?
+  professional       HealthProfessional? @relation(fields: [professionalId], references: [id])
+  vacancyId          String?
+  vacancy            Vacancy?            @relation(fields: [vacancyId], references: [id])
+  applicationId      String?
+  application        Application?        @relation(fields: [applicationId], references: [id])
+  allocationId       String?
+  allocation         Allocation?         @relation(fields: [allocationId], references: [id])
+  assignedToUserId   String?
+  assignedToUser     User?               @relation(fields: [assignedToUserId], references: [id])
+  channel            ChannelType         @default(WHATSAPP)
+  status             ConversationStatus  @default(OPEN)
+  aiEnabled          Boolean             @default(false)
+  lastMessagePreview String?
+  internalSummary    String?
+  subject            String?
+  lastMessageAt      DateTime?
+  messages           Message[]
+  aiRuns             AiConversationRun[]
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+}
+
+model Message {
+  id             String           @id @default(cuid())
+  conversationId String
+  conversation   Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  direction      MessageDirection
+  body           String
+  status         MessageStatus    @default(SENT)
+  sentByAi       Boolean          @default(false)
+  createdAt      DateTime         @default(now())
+}
+
+// Identidade do profissional em um canal (ex.: número de WhatsApp).
+model ChannelIdentity {
+  id             String             @id @default(cuid())
+  professionalId String
+  professional   HealthProfessional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  channel        ChannelType
+  identifier     String
+  verified       Boolean            @default(false)
+  createdAt      DateTime           @default(now())
+
+  @@unique([channel, identifier])
+}
+
+// ------------------------------ Inteligência Artificial ------------------
+
+enum AiRunStatus {
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model AiConversationRun {
+  id                String        @id @default(cuid())
+  conversationId    String?
+  conversation      Conversation? @relation(fields: [conversationId], references: [id])
+  aiInteractionId   String?
+  trigger           String?       // ex.: INBOUND_MESSAGE, MANUAL, SCHEDULED
+  status            AiRunStatus   @default(COMPLETED)
+  model             String        @default("claude-haiku-4-5")
+  dryRun            Boolean       @default(false)
+  inputMessagesCount Int          @default(0)
+  outputMessage     String?
+  toolCallsCount    Int           @default(0)
+  actionsCount      Int           @default(0)
+  outcome           String?
+  tokensUsed        Int           @default(0)
+  error             String?
+  startedAt         DateTime      @default(now())
+  finishedAt        DateTime?
+  createdAt         DateTime      @default(now())
+}
+
+// ----------------------------- Integrações (mensageria) ------------------
+
+enum ProviderType {
+  WHATSAPP_CLOUD
+  TWILIO
+  ZENVIA
+  META
+  CUSTOM
+}
+
+enum ProviderStatus {
+  ACTIVE
+  INACTIVE
+  ERROR
+  NOT_CONFIGURED
+}
+
+model MessagingProvider {
+  id        String         @id @default(cuid())
+  name      String
+  type      ProviderType
+  status    ProviderStatus @default(NOT_CONFIGURED)
+  isDefault Boolean        @default(false)
+  config    Json?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+}
+
+model OutboundMessageLog {
+  id                String        @id @default(cuid())
+  provider          String        @default("twilio")
+  channel           ChannelType   @default(WHATSAPP)
+  conversationId    String?
+  messageId         String?
+  to                String
+  from              String?
+  contentType       String?       @default("text")
+  body              String
+  status            MessageStatus @default(QUEUED)
+  externalMessageId String?
+  requestPayload    Json?
+  responsePayload   Json?
+  errorCode         String?
+  errorMessage      String?
+  sentAt            DateTime?
+  createdAt         DateTime      @default(now())
+}
+
+model WebhookLog {
+  id              String      @id @default(cuid())
+  provider        String
+  channel         ChannelType @default(WHATSAPP)
+  eventType       String
+  externalEventId String?
+  payload         Json?
+  headers         Json?
+  processed       Boolean     @default(false)
+  processedAt     DateTime?
+  error           String?
+  createdAt       DateTime    @default(now())
+}
+
+// ------------------------------ Tipos de documento -----------------------
+
+enum DocumentScope {
+  PROFESSIONAL
+  ORGANIZATION
+  CONTRACT
+  VACANCY
+}
+
+model DocumentType {
+  id                    String        @id @default(cuid())
+  name                  String
+  slug                  String?       @unique
+  description           String?
+  scope                 DocumentScope @default(PROFESSIONAL)
+  requiredByDefault     Boolean       @default(false)
+  requiresExpirationDate Boolean      @default(false)
+  requiresManualReview  Boolean       @default(false)
+  active                Boolean       @default(true)
+  deletedAt             DateTime?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @default(now()) @updatedAt
+}
+
+// --------------------------------- Financeiro ----------------------------
+
+enum FinancialEntryType {
+  CLIENT_RECEIVABLE
+  PUBLIC_AGENCY_RECEIVABLE
+  PROFESSIONAL_PAYABLE
+  PLATFORM_FEE
+  OTHER
+}
+
+enum FinancialDirection {
+  IN
+  OUT
+}
+
+enum FinancialEntryStatus {
+  PENDING_APPROVAL
+  APPROVED
+  PAID
+  OVERDUE
+  CANCELLED
+  CONTESTED
+}
+
+// Lançamento financeiro (recebíveis/pagáveis). Relações para refletir o
+// objeto completo retornado pela produção.
+model FinancialEntry {
+  id             String               @id @default(cuid())
+  type           FinancialEntryType
+  direction      FinancialDirection
+  status         FinancialEntryStatus @default(PENDING_APPROVAL)
+  amount         Decimal              @db.Decimal(12, 2)
+  currency       String               @default("BRL")
+  description    String?
+  dueDate        DateTime?
+  competenceDate DateTime?
+  approvedAt     DateTime?
+  paidAt         DateTime?
+  organizationId String?
+  organization   Organization?        @relation(fields: [organizationId], references: [id])
+  publicAgencyId String?
+  publicAgency   PublicAgency?        @relation(fields: [publicAgencyId], references: [id])
+  doctorId       String?
+  doctor         HealthProfessional?  @relation(fields: [doctorId], references: [id])
+  healthUnitId   String?
+  healthUnit     HealthUnit?          @relation(fields: [healthUnitId], references: [id])
+  contractId     String?
+  contract       Contract?            @relation(fields: [contractId], references: [id])
+  vacancyId      String?
+  vacancy        Vacancy?             @relation(fields: [vacancyId], references: [id])
+  allocationId   String?
+  allocation     Allocation?          @relation(fields: [allocationId], references: [id])
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+
+  @@index([status])
+  @@index([dueDate])
+  @@index([vacancyId])
+  @@index([contractId])
+  @@index([organizationId])
+  @@index([doctorId])
+}

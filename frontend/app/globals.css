@@ -1,0 +1,121 @@
+@import 'tailwindcss';
+
+/* Design system recuperado do HealthMatch (tokens --hm-* da produção). */
+@theme {
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+
+  --color-hm-primary: #0b74d1;
+  --color-hm-primary-strong: #0964b5;
+  --color-hm-primary-soft: #e0f2fe;
+  --color-hm-primary-soft-strong: #c8e8fb;
+  --color-hm-accent: #1e3a5f;
+  --color-hm-accent-soft: #dbeafe;
+
+  --color-hm-bg: #f8fafc;
+  --color-hm-bg-elevated: #f1f5f9;
+  --color-hm-surface: #ffffff;
+  --color-hm-surface-muted: #f1f5f9;
+  --color-hm-surface-subtle: #fbfdff;
+
+  --color-hm-border: #e2e8f0;
+  --color-hm-border-soft: #edf2f7;
+
+  --color-hm-text: #0f172a;
+  --color-hm-text-muted: #475569;
+  --color-hm-text-subtle: #94a3b8;
+
+  --color-hm-success: #16a34a;
+  --color-hm-success-soft: #dcfce7;
+  --color-hm-danger: #dc2626;
+  --color-hm-danger-soft: #fee2e2;
+  --color-hm-warning: #d97706;
+  --color-hm-warning-soft: #fef3c7;
+  --color-hm-info: #0284c7;
+  --color-hm-info-soft: #e0f2fe;
+
+  --color-hm-sidebar-bg: #0f1b2d;
+  --color-hm-sidebar-active: #1e3a5f;
+
+  --radius-hm-sm: 0.45rem;
+  --radius-hm-md: 0.625rem;
+  --radius-hm-lg: 0.875rem;
+  --radius-hm-xl: 1rem;
+
+  --shadow-hm-card: 0 1px 2px #0f172a0a;
+  --shadow-hm-card-hover: 0 6px 18px #0f172a12;
+  --shadow-hm-overlay: 0 12px 32px #0f172a1a;
+}
+
+html,
+body {
+  background: var(--color-hm-bg);
+  color: var(--color-hm-text);
+  font-family: var(--font-sans);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+@layer components {
+  .input {
+    width: 100%;
+    border-radius: var(--radius-hm-sm);
+    border: 1px solid var(--color-hm-border);
+    background: var(--color-hm-surface);
+    padding: 0.55rem 0.75rem;
+    font-size: 0.875rem;
+    color: var(--color-hm-text);
+    outline: none;
+  }
+  .input::placeholder {
+    color: var(--color-hm-text-subtle);
+  }
+  .input:focus {
+    border-color: var(--color-hm-primary);
+    box-shadow: 0 0 0 3px #0b74d129;
+  }
+
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    border-radius: var(--radius-hm-sm);
+    background: var(--color-hm-primary);
+    padding: 0.55rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #fff;
+  }
+  .btn-primary:hover {
+    background: var(--color-hm-primary-strong);
+  }
+  .btn-primary:disabled {
+    opacity: 0.6;
+  }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    border-radius: var(--radius-hm-sm);
+    border: 1px solid var(--color-hm-border);
+    background: var(--color-hm-surface);
+    padding: 0.5rem 0.9rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--color-hm-text);
+  }
+  .btn-ghost:hover {
+    background: var(--color-hm-surface-muted);
+  }
+
+  .card {
+    border-radius: var(--radius-hm-lg);
+    border: 1px solid var(--color-hm-border);
+    background: var(--color-hm-surface);
+    box-shadow: var(--shadow-hm-card);
+  }
+}
