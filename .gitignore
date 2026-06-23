@@ -1,0 +1,13 @@
+# Credenciais — NUNCA comitar
+.env
+.env.local
+
+# Dependencias
+node_modules/
+
+# Saida gerada pela recuperacao (pode conter dados sensiveis de producao)
+recovered-healthmatch/
+
+# Sistema
+.DS_Store
+*.log
