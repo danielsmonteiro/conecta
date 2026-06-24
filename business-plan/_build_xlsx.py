@@ -1,36 +1,26 @@
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
-from openpyxl.utils import get_column_letter
 
-BLUE = Font(name="Arial", color="0000FF", size=10)            # inputs
-BLACK = Font(name="Arial", color="000000", size=10)           # formulas
-GREEN = Font(name="Arial", color="008000", size=10)           # cross-sheet links
+BLUE = Font(name="Arial", color="0000FF", size=10)
+BLACK = Font(name="Arial", color="000000", size=10)
+GREEN = Font(name="Arial", color="008000", size=10)
 BOLD = Font(name="Arial", color="000000", size=10, bold=True)
+REDB = Font(name="Arial", color="B00020", size=10, bold=True)
 WHITE_BOLD = Font(name="Arial", color="FFFFFF", size=11, bold=True)
 TITLE = Font(name="Arial", color="0B2D5B", size=15, bold=True)
 SUB = Font(name="Arial", color="555555", size=9, italic=True)
-
 NAVY = PatternFill("solid", fgColor="0B2D5B")
 LBLUE = PatternFill("solid", fgColor="DCE6F1")
 YEL = PatternFill("solid", fgColor="FFF2CC")
 GREY = PatternFill("solid", fgColor="F2F2F2")
-
+REDF = PatternFill("solid", fgColor="FCE4E4")
 CUR = 'R$ #,##0;(R$ #,##0);"-"'
-CUR_MM = 'R$ #,##0.0,, "mi";(R$ #,##0.0,, "mi");"-"'
+CUR_MM = 'R$ #,##0.00,, "mi";(R$ #,##0.00,, "mi");"-"'
 PCT = '0.0%'
-MULT = '0.0"x"'
 NUM = '#,##0;(#,##0);"-"'
+DEC = '#,##0.0'
 thin = Side(style="thin", color="BFBFBF")
 BORDER = Border(left=thin, right=thin, top=thin, bottom=thin)
-
-wb = Workbook()
-
-def hdr(ws, row, cols, labels, fill=NAVY, font=WHITE_BOLD):
-    for i, lab in enumerate(labels):
-        c = ws.cell(row=row, column=cols + i, value=lab)
-        c.fill = fill; c.font = font
-        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-        c.border = BORDER
 
 def setc(ws, coord, val, font=BLACK, fmt=None, fill=None, align=None, border=True):
     c = ws[coord]; c.value = val; c.font = font
@@ -40,272 +30,165 @@ def setc(ws, coord, val, font=BLACK, fmt=None, fill=None, align=None, border=Tru
     if border: c.border = BORDER
     return c
 
-# ---------------------------------------------------------------- PREMISSAS
+def hdr(ws, row, col, labels):
+    for i, lab in enumerate(labels):
+        c = ws.cell(row=row, column=col + i, value=lab)
+        c.fill = NAVY; c.font = WHITE_BOLD; c.border = BORDER
+        c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+
+wb = Workbook()
+
+# ============================================================ PREMISSAS
 ws = wb.active; ws.title = "Premissas"
 ws.sheet_view.showGridLines = False
-setc(ws, "A1", "HealthMatch — Modelo Financeiro (Pre-seed)", TITLE, border=False)
-setc(ws, "A2", "Azul = premissa editável · Preto = fórmula · Verde = link entre abas · Valores em R$ · Pré-lançamento: tudo é premissa de mercado", SUB, border=False)
+setc(ws, "A1", "HealthMatch — Modelo Financeiro (pivô: contingência / gap-filling)", TITLE, border=False)
+setc(ws, "A2", "Azul = premissa editável · Preto = fórmula · Verde = link. Core = cobrir o GAP (descobertas/no-shows), não gerir toda a escala.", SUB, border=False)
 ws.merge_cells("A1:F1"); ws.merge_cells("A2:G2")
 
-setc(ws, "A4", "Premissas globais", BOLD, fill=LBLUE)
-ws.merge_cells("A4:C4")
+setc(ws, "A4", "Premissas globais", BOLD, fill=LBLUE); ws.merge_cells("A4:C4")
 glob = [
-    ("Ticket médio por plantão (GMV)", 1300, CUR),
-    ("ARPA SaaS (mensal por conta)", 4000, CUR),
-    ("Margem bruta (blended)", 0.68, PCT),
-    ("Meses por ano", 12, NUM),
+    ("Plantão médico 12h (R$)", 1200, CUR),
+    ("Ticket médio ponderado por classe (R$)", 900, CUR),
+    ("Teto do trade / fee sobre o plantão (≤5%)", 0.02, PCT),
+    ("SaaS de prontidão — Coaph (R$/mês)", 8000, CUR),
+    ("Custo atual de prepostos (R$/mês)", 240000, CUR),
+    ("% do custo de prepostos ligado a gaps/exceções", 0.35, PCT),
+    ("% dos gaps cobertos com sobrepreço hoje", 0.35, PCT),
+    ("Sobrepreço médio por cobertura emergencial (R$)", 250, CUR),
+    ("% dos gaps que ficariam descobertos (penalidade)", 0.06, PCT),
+    ("Penalidade média por plantão descoberto (R$)", 1200, CUR),
+    ("Investimento PLENO em avaliação (R$)", 1500000, CUR),
+    ("Investimento do PILOTO (R$)", 300000, CUR),
 ]
 r = 5
 for name, val, fmt in glob:
-    setc(ws, f"A{r}", name, BLACK)
-    setc(ws, f"B{r}", val, BLUE, fmt, fill=YEL)
-    r += 1
-# named refs by row
-TICKET, ARPA, GM, MESES = "Premissas!$B$5", "Premissas!$B$6", "Premissas!$B$7", "Premissas!$B$8"
+    setc(ws, f"A{r}", name, BLACK); setc(ws, f"B{r}", val, BLUE, fmt, fill=YEL); r += 1
+# B5 médico, B6 ticket, B7 fee%, B8 SaaS, B9 prepostos, B10 %gapPrep, B11 %sobre, B12 vSobre, B13 %desc, B14 vPen, B15 invPleno, B16 piloto
+TICKET, FEE, SAAS, PREP, PGAP = "Premissas!$B$6", "Premissas!$B$7", "Premissas!$B$8", "Premissas!$B$9", "Premissas!$B$10"
+PSOBRE, VSOBRE, PDESC, VPEN, INV, PILOT = "Premissas!$B$11", "Premissas!$B$12", "Premissas!$B$13", "Premissas!$B$14", "Premissas!$B$15", "Premissas!$B$16"
 
-setc(ws, "A11", "Drivers por cenário", BOLD, fill=LBLUE); ws.merge_cells("A11:G11")
-hdr(ws, 12, 1, ["Driver", "Cenário", "Ano 1", "Ano 2", "Ano 3"])
-# scenario blocks: plantões/mês média, take-rate, contas SaaS média
-rows_def = [
-    ("Plantões/mês (média)", "Conservador", 400, 2200, 6000, NUM),
-    ("Plantões/mês (média)", "Realista",    800, 4500, 12000, NUM),
-    ("Plantões/mês (média)", "Otimista",    1300, 8000, 22000, NUM),
-    ("Take-rate (% do GMV)", "Conservador", 0.05, 0.05, 0.05, PCT),
-    ("Take-rate (% do GMV)", "Realista",    0.07, 0.07, 0.07, PCT),
-    ("Take-rate (% do GMV)", "Otimista",    0.08, 0.08, 0.08, PCT),
-    ("Contas SaaS (média ano)", "Conservador", 2.5, 11.25, 35.42, '#,##0.0'),
-    ("Contas SaaS (média ano)", "Realista",    4.5, 22.5, 70.0, '#,##0.0'),
-    ("Contas SaaS (média ano)", "Otimista",    7.5, 39.58, 120.83, '#,##0.0'),
-]
-r = 13
-for name, scen, y1, y2, y3, fmt in rows_def:
-    setc(ws, f"A{r}", name, BLACK)
-    setc(ws, f"B{r}", scen, BLACK)
-    setc(ws, f"C{r}", y1, BLUE, fmt, fill=YEL)
-    setc(ws, f"D{r}", y2, BLUE, fmt, fill=YEL)
-    setc(ws, f"E{r}", y3, BLUE, fmt, fill=YEL)
-    r += 1
-# row map: plantões cons=13 real=14 otim=15; take cons=16 real=17 otim=18; contas cons=19 real=20 otim=21
-
-setc(ws, "A23", "Opex — cenário Realista (R$/ano)", BOLD, fill=LBLUE); ws.merge_cells("A23:E23")
-hdr(ws, 24, 1, ["Linha", "", "Ano 1", "Ano 2", "Ano 3"])
-opex = [
-    ("Pessoal", 1100000, 2400000, 4800000),
-    ("Marketing & Vendas", 150000, 600000, 1800000),
-    ("Infra & ferramentas", 120000, 300000, 700000),
-    ("G&A / jurídico / contábil", 120000, 300000, 700000),
-]
-r = 25
-for name, y1, y2, y3 in opex:
-    setc(ws, f"A{r}", name, BLACK)
-    setc(ws, f"C{r}", y1, BLUE, CUR, fill=YEL)
-    setc(ws, f"D{r}", y2, BLUE, CUR, fill=YEL)
-    setc(ws, f"E{r}", y3, BLUE, CUR, fill=YEL)
-    r += 1
-# opex rows: pessoal25 mkt26 infra27 ga28
-setc(ws, "A29", "Opex total", BOLD)
-for col in ("C", "D", "E"):
-    setc(ws, f"{col}29", f"=SUM({col}25:{col}28)", BOLD, CUR, fill=GREY)
-
-for col, w in zip("ABCDEFG", [30, 14, 14, 14, 14, 4, 4]):
+setc(ws, "A18", "Cenários do gap (a validar no piloto)", BOLD, fill=LBLUE); ws.merge_cells("A18:E18")
+hdr(ws, 19, 1, ["Driver", "Conservador", "Realista", "Otimista"])
+setc(ws, "A20", "Gaps cobertos/mês", BLACK)
+setc(ws, "B20", 400, BLUE, NUM, fill=YEL); setc(ws, "C20", 600, BLUE, NUM, fill=YEL); setc(ws, "D20", 1000, BLUE, NUM, fill=YEL)
+setc(ws, "A21", "% da parcela de gap automatizável", BLACK)
+setc(ws, "B21", 0.30, BLUE, PCT, fill=YEL); setc(ws, "C21", 0.45, BLUE, PCT, fill=YEL); setc(ws, "D21", 0.60, BLUE, PCT, fill=YEL)
+setc(ws, "A23", "Nota: sobrepreço e penalidade são as premissas de MAIOR peso e mais incertas — o piloto existe para validá-las. Ticket ponderado reflete o mix (médico R$1.200; enf/téc caem muito).", SUB, border=False)
+ws.merge_cells("A23:G24")
+for col, w in zip("ABCDEFG", [42, 14, 14, 14, 6, 4, 4]):
     ws.column_dimensions[col].width = w
+GAPS = {"B": "B20", "C": "C20", "D": "D20"}
+AUT = {"B": "B21", "C": "C21", "D": "D21"}
 
-# ---------------------------------------------------------------- CENÁRIOS
-ws2 = wb.create_sheet("Cenários")
+# ============================================================ RECEITA HM (1 Coaph)
+ws2 = wb.create_sheet("Receita HM (Coaph)")
 ws2.sheet_view.showGridLines = False
-setc(ws2, "A1", "Projeção de receita — 3 cenários", TITLE, border=False); ws2.merge_cells("A1:F1")
-setc(ws2, "A2", "Receita líquida = Take-rate sobre GMV + Receita SaaS. GMV = plantões × ticket. (links em verde puxam da aba Premissas)", SUB, border=False)
-ws2.merge_cells("A2:G2")
-
-scen_map = {"Conservador": (13, 16, 19), "Realista": (14, 17, 20), "Otimista": (15, 18, 21)}
-row = 4
-anchor = {}
-for scen, (pr, tr, ar) in scen_map.items():
-    setc(ws2, f"A{row}", scen, WHITE_BOLD, fill=NAVY); ws2.merge_cells(f"A{row}:D{row}")
-    hdr(ws2, row + 1, 1, ["Métrica", "Ano 1", "Ano 2", "Ano 3"], fill=LBLUE, font=BOLD)
-    base = row + 2
-    # GMV = plantões/mês * meses * ticket
-    setc(ws2, f"A{base}", "GMV (R$)", BLACK)
-    for i, col in enumerate(["B", "C", "D"]):
-        pcol = ["C", "D", "E"][i]
-        setc(ws2, f"{col}{base}", f"=Premissas!{pcol}{pr}*{MESES}*{TICKET}", GREEN, CUR)
-    # Take-rate revenue
-    setc(ws2, f"A{base+1}", "Receita de fee (take-rate)", BLACK)
-    for i, col in enumerate(["B", "C", "D"]):
-        pcol = ["C", "D", "E"][i]
-        setc(ws2, f"{col}{base+1}", f"={col}{base}*Premissas!{pcol}{tr}", BLACK, CUR)
-    # SaaS revenue = contas * ARPA * meses
-    setc(ws2, f"A{base+2}", "Receita SaaS (assinatura)", BLACK)
-    for i, col in enumerate(["B", "C", "D"]):
-        pcol = ["C", "D", "E"][i]
-        setc(ws2, f"{col}{base+2}", f"=Premissas!{pcol}{ar}*{ARPA}*{MESES}", GREEN, CUR)
-    # Total net revenue
-    setc(ws2, f"A{base+3}", "Receita líquida total", BOLD)
-    for col in ["B", "C", "D"]:
-        setc(ws2, f"{col}{base+3}", f"={col}{base+1}+{col}{base+2}", BOLD, CUR, fill=GREY)
-    anchor[scen] = base + 3
-    row = base + 5
-
-# summary table
-setc(ws2, "A24", "Resumo — Receita líquida por cenário", BOLD, fill=LBLUE); ws2.merge_cells("A24:D24")
-hdr(ws2, 25, 1, ["Cenário", "Ano 1", "Ano 2", "Ano 3"], fill=LBLUE, font=BOLD)
-rr = 26
-for scen in ["Conservador", "Realista", "Otimista"]:
-    a = anchor[scen]
-    setc(ws2, f"A{rr}", scen, BLACK)
-    for col in ["B", "C", "D"]:
-        setc(ws2, f"{col}{rr}", f"={col}{a}", BLACK, CUR_MM)
-    rr += 1
-
-for col, w in zip("ABCDE", [30, 16, 16, 16, 4]):
+setc(ws2, "A1", "Receita do HealthMatch a partir da Coaph (SaaS + fee por gap)", TITLE, border=False)
+setc(ws2, "A2", "Modelo híbrido: mensalidade de prontidão (fixa) + fee por gap preenchido, capado no teto do trade (≤2%).", SUB, border=False)
+ws2.merge_cells("A1:E1"); ws2.merge_cells("A2:F2")
+hdr(ws2, 4, 1, ["Linha (R$/mês)", "Conservador", "Realista", "Otimista"])
+setc(ws2, "A5", "Fee por gap (gaps × ticket × teto)", BLACK)
+for col in "BCD":
+    setc(ws2, f"{col}5", f"=Premissas!{GAPS[col]}*{TICKET}*{FEE}", GREEN, CUR)
+setc(ws2, "A6", "SaaS de prontidão", BLACK)
+for col in "BCD":
+    setc(ws2, f"{col}6", f"={SAAS}", GREEN, CUR)
+setc(ws2, "A7", "Receita HM / mês", BOLD)
+for col in "BCD":
+    setc(ws2, f"{col}7", f"={col}5+{col}6", BOLD, CUR, fill=GREY)
+setc(ws2, "A8", "Receita HM / ano", BOLD)
+for col in "BCD":
+    setc(ws2, f"{col}8", f"={col}7*12", BOLD, CUR, fill=LBLUE)
+for col, w in zip("ABCD", [34, 15, 15, 15]):
     ws2.column_dimensions[col].width = w
+# realista monthly HM revenue = C7
+HMREV_M = {"B": "'Receita HM (Coaph)'!B7", "C": "'Receita HM (Coaph)'!C7", "D": "'Receita HM (Coaph)'!D7"}
 
-# realista anchor rows for DRE link
-REAL_BASE = scen_map  # placeholder
-real_anchor = anchor["Realista"]  # total revenue row for realista
-# we also need GMV row of realista = real_anchor-3
-REAL_GMV = real_anchor - 3
-REAL_REV = real_anchor
-
-# ---------------------------------------------------------------- DRE
-ws3 = wb.create_sheet("DRE (Realista)")
+# ============================================================ ECONOMIA COAPH (defensiva)
+ws3 = wb.create_sheet("Economia Coaph", 1)  # posiciona como 2ª aba (núcleo da decisão)
 ws3.sheet_view.showGridLines = False
-setc(ws3, "A1", "DRE — cenário Realista", TITLE, border=False); ws3.merge_cells("A1:E1")
-setc(ws3, "A2", "Demonstração resumida. COGS via margem bruta (premissa). Opex puxado da aba Premissas.", SUB, border=False)
-ws3.merge_cells("A2:E2")
-hdr(ws3, 4, 1, ["Linha (R$)", "Ano 1", "Ano 2", "Ano 3"])
-# revenue links to Cenários realista
-setc(ws3, "A5", "Receita líquida", BLACK)
-for col, ccol in zip(["B", "C", "D"], ["B", "C", "D"]):
-    setc(ws3, f"{col}5", f"='Cenários'!{ccol}{REAL_REV}", GREEN, CUR)
-setc(ws3, "A6", "(–) COGS", BLACK)
-for col in ["B", "C", "D"]:
-    setc(ws3, f"{col}6", f"=-{col}5*(1-{GM})", BLACK, CUR)
-setc(ws3, "A7", "Lucro bruto", BOLD)
-for col in ["B", "C", "D"]:
-    setc(ws3, f"{col}7", f"={col}5+{col}6", BOLD, CUR, fill=GREY)
-setc(ws3, "A8", "Margem bruta %", BLACK)
-for col in ["B", "C", "D"]:
-    setc(ws3, f"{col}8", f"={col}7/{col}5", BLACK, PCT)
-# opex
-setc(ws3, "A9", "(–) Pessoal", BLACK)
-setc(ws3, "A10", "(–) Marketing & Vendas", BLACK)
-setc(ws3, "A11", "(–) Infra & ferramentas", BLACK)
-setc(ws3, "A12", "(–) G&A / jurídico", BLACK)
-for col, pcol in zip(["B", "C", "D"], ["C", "D", "E"]):
-    setc(ws3, f"{col}9", f"=-Premissas!{pcol}25", GREEN, CUR)
-    setc(ws3, f"{col}10", f"=-Premissas!{pcol}26", GREEN, CUR)
-    setc(ws3, f"{col}11", f"=-Premissas!{pcol}27", GREEN, CUR)
-    setc(ws3, f"{col}12", f"=-Premissas!{pcol}28", GREEN, CUR)
-setc(ws3, "A13", "Opex total", BOLD)
-for col in ["B", "C", "D"]:
-    setc(ws3, f"{col}13", f"=SUM({col}9:{col}12)", BOLD, CUR, fill=GREY)
-setc(ws3, "A14", "EBITDA", WHITE_BOLD, fill=NAVY)
-for col in ["B", "C", "D"]:
-    c = setc(ws3, f"{col}14", f"={col}7+{col}13", WHITE_BOLD, CUR, fill=NAVY)
-setc(ws3, "A15", "Margem EBITDA %", BLACK)
-for col in ["B", "C", "D"]:
-    setc(ws3, f"{col}15", f"={col}14/{col}5", BLACK, PCT)
-for col, w in zip("ABCDE", [28, 16, 16, 16, 4]):
+setc(ws3, "A1", "Economia da Coaph (tese defensiva) — e o veredito de payback", TITLE, border=False)
+setc(ws3, "A2", "Âncora: parcela do custo de prepostos ligada a gaps/exceções. Honesto: a defensiva sozinha NÃO paga R$1,5mi rápido.", SUB, border=False)
+ws3.merge_cells("A1:E1"); ws3.merge_cells("A2:F2")
+hdr(ws3, 4, 1, ["Economia (R$/mês)", "Conservador", "Realista", "Otimista"])
+setc(ws3, "A5", "1) Tempo de preposto no gap (parcela × autom.%)", BLACK)
+for col in "BCD":
+    setc(ws3, f"{col}5", f"=({PREP}*{PGAP})*Premissas!{AUT[col]}", BLACK, CUR)
+setc(ws3, "A6", "2) Sobrepreço emergencial evitado (gaps×%×R$)", BLACK)
+for col in "BCD":
+    setc(ws3, f"{col}6", f"=Premissas!{GAPS[col]}*{PSOBRE}*{VSOBRE}", BLACK, CUR)
+setc(ws3, "A7", "3) Penalidade evitada (gaps×%desc×R$)", BLACK)
+for col in "BCD":
+    setc(ws3, f"{col}7", f"=Premissas!{GAPS[col]}*{PDESC}*{VPEN}", BLACK, CUR)
+setc(ws3, "A8", "Economia BRUTA total / mês", BOLD)
+for col in "BCD":
+    setc(ws3, f"{col}8", f"=SUM({col}5:{col}7)", BOLD, CUR, fill=GREY)
+setc(ws3, "A9", "(–) Custo pago ao HealthMatch (SaaS+fee)", BLACK)
+for col in "BCD":
+    setc(ws3, f"{col}9", f"=-{HMREV_M[col]}", GREEN, CUR)
+setc(ws3, "A10", "Economia LÍQUIDA da Coaph / mês", BOLD)
+for col in "BCD":
+    setc(ws3, f"{col}10", f"={col}8+{col}9", BOLD, CUR, fill=LBLUE)
+setc(ws3, "A11", "Economia líquida / ano", BOLD)
+for col in "BCD":
+    setc(ws3, f"{col}11", f"={col}10*12", BOLD, CUR, fill=LBLUE)
+setc(ws3, "A13", "Payback (meses) sobre a economia líquida", BOLD, fill=LBLUE); ws3.merge_cells("A13:D13")
+setc(ws3, "A14", "PILOTO (R$ 300k) — o ask atual", BOLD)
+for col in "BCD":
+    setc(ws3, f"{col}14", f"={PILOT}/{col}10", BOLD, DEC, fill=GREY)
+setc(ws3, "A15", "Rodada plena (R$ 1,5 mi) — futura/ofensiva", BLACK)
+for col in "BCD":
+    setc(ws3, f"{col}15", f"={INV}/{col}10", BLACK, DEC)
+setc(ws3, "A16", "Floor honesto: só prepostos paga R$1,5mi em (meses)", REDB)
+for col in "BCD":
+    setc(ws3, f"{col}16", f"={INV}/{col}5", REDB, DEC, fill=REDF)
+setc(ws3, "A18", "Leitura: o PILOTO (R$300k) se paga em poucos meses mesmo no conservador. A economia depende sobretudo de sobrepreço+penalidade (linhas 2-3) — premissas que o piloto valida. Como CLIENTE, a Coaph é líquida-positiva todo mês.", SUB, border=False)
+ws3.merge_cells("A18:F19")
+for col, w in zip("ABCD", [44, 14, 14, 14]):
     ws3.column_dimensions[col].width = w
 
-# ---------------------------------------------------------------- MÉTRICAS
-ws4 = wb.create_sheet("Métricas")
+# ============================================================ RECEITA HM (escala — ofensiva)
+ws4 = wb.create_sheet("Receita HM (escala)")
 ws4.sheet_view.showGridLines = False
-setc(ws4, "A1", "Unit economics (visão SaaS-only, conservadora)", TITLE, border=False); ws4.merge_cells("A1:D1")
-setc(ws4, "A2", "Visão SaaS-only para ser defensável. Economia blended (com take-rate) é maior, mas limitada por liquidez.", SUB, border=False)
-ws4.merge_cells("A2:E2")
-hdr(ws4, 4, 1, ["Métrica", "Valor", "Unidade"])
-m = [
-    ("ARPA (mensal)", f"={ARPA}", CUR, "R$/mês", "input"),
-    ("Margem bruta SaaS", 0.80, PCT, "%", "blue"),
-    ("CAC por conta institucional", 15000, CUR, "R$", "blue"),
-    ("Churn anual (logo)", 0.12, PCT, "%", "blue"),
-    ("Horizonte de LTV (cap)", 36, NUM, "meses", "blue"),
-]
-r = 5
-for name, val, fmt, unit, kind in m:
-    setc(ws4, f"A{r}", name, BLACK)
-    if kind == "input":
-        setc(ws4, f"B{r}", val, GREEN, fmt)
-    else:
-        setc(ws4, f"B{r}", val, BLUE, fmt, fill=YEL)
-    setc(ws4, f"C{r}", unit, SUB)
-    r += 1
-# B5 ARPA, B6 GM saas, B7 CAC, B8 churn, B9 cap
-setc(ws4, "A11", "Resultados", BOLD, fill=LBLUE); ws4.merge_cells("A11:C11")
-setc(ws4, "A12", "Churn mensal", BLACK); setc(ws4, "B12", "=1-(1-B8)^(1/12)", BLACK, PCT)
-setc(ws4, "A13", "Contribuição mensal/conta", BLACK); setc(ws4, "B13", "=B5*B6", BLACK, CUR)
-setc(ws4, "A14", "LTV (36m, capado)", BOLD); setc(ws4, "B14", "=B13*B9", BOLD, CUR, fill=GREY)
-setc(ws4, "A15", "LTV / CAC", WHITE_BOLD, fill=NAVY); setc(ws4, "B15", "=B14/B7", WHITE_BOLD, MULT, fill=NAVY)
-setc(ws4, "A16", "Payback de CAC (meses)", BOLD); setc(ws4, "B16", "=B7/B13", BOLD, '#,##0.0', fill=GREY)
-setc(ws4, "A18", "CAC de profissionais (oferta) na âncora", BLACK); setc(ws4, "B18", 0, BLUE, CUR, fill=YEL)
-setc(ws4, "C18", "≈ R$ 0 — base de 55k cooperados pré-existente", SUB)
-for col, w in zip("ABCD", [32, 16, 28, 4]):
+setc(ws4, "A1", "Receita do HealthMatch em escala (tese ofensiva — upside)", TITLE, border=False)
+setc(ws4, "A2", "Receita por cooperativa ≈ realista da aba Receita HM. Negócio de SaaS de contingência, modesto e previsível — não marketplace de take-rate gordo.", SUB, border=False)
+ws4.merge_cells("A1:E1"); ws4.merge_cells("A2:F2")
+hdr(ws4, 4, 1, ["", "Ano 1", "Ano 2", "Ano 3"])
+setc(ws4, "A5", "Cooperativas/clientes ativos (média)", BLACK)
+setc(ws4, "B5", 1, BLUE, NUM, fill=YEL); setc(ws4, "C5", 5, BLUE, NUM, fill=YEL); setc(ws4, "D5", 15, BLUE, NUM, fill=YEL)
+setc(ws4, "A6", "Receita/cliente/ano (realista)", BLACK)
+for col in "BCD":
+    setc(ws4, f"{col}6", "='Receita HM (Coaph)'!C8", GREEN, CUR)
+setc(ws4, "A7", "Receita HM total/ano", BOLD)
+for col in "BCD":
+    setc(ws4, f"{col}7", f"={col}5*{col}6", BOLD, CUR, fill=LBLUE)
+setc(ws4, "A9", "Premissa de ramp-up (clientes) e ticket idêntico ao realista; ajuste conforme pipeline. Receita Ano 3 modesta vs. marketplace anterior — coerente com margem fina.", SUB, border=False)
+ws4.merge_cells("A9:F10")
+for col, w in zip("ABCD", [34, 15, 15, 15]):
     ws4.column_dimensions[col].width = w
 
-# ---------------------------------------------------------------- USO DOS RECURSOS
-ws5 = wb.create_sheet("Uso dos Recursos")
+# ============================================================ SENSIBILIDADE
+ws5 = wb.create_sheet("Sensibilidade")
 ws5.sheet_view.showGridLines = False
-setc(ws5, "A1", "Uso dos recursos — Pre-seed", TITLE, border=False); ws5.merge_cells("A1:D1")
-setc(ws5, "A3", "Captação total (R$)", BOLD); setc(ws5, "B3", 1500000, BLUE, CUR, fill=YEL)
-hdr(ws5, 5, 1, ["Destino", "%", "Valor (R$)"])
-uf = [
-    ("Produto & Engenharia", 0.55),
-    ("GTM (Vendas & Marketing)", 0.18),
-    ("Infra & COGS iniciais", 0.10),
-    ("Jurídico / Compliance / LGPD", 0.09),
-    ("Reserva / contingência", 0.08),
-]
-r = 6
-for name, pct in uf:
-    setc(ws5, f"A{r}", name, BLACK)
-    setc(ws5, f"B{r}", pct, BLUE, PCT, fill=YEL)
-    setc(ws5, f"C{r}", f"=$B$3*B{r}", BLACK, CUR)
-    r += 1
-setc(ws5, f"A{r}", "Total", BOLD)
-setc(ws5, f"B{r}", f"=SUM(B6:B{r-1})", BOLD, PCT, fill=GREY)
-setc(ws5, f"C{r}", f"=SUM(C6:C{r-1})", BOLD, CUR, fill=GREY)
-setc(ws5, f"A{r+2}", "Runway-alvo (meses)", BLACK); setc(ws5, f"B{r+2}", 20, BLUE, NUM, fill=YEL)
-setc(ws5, f"A{r+3}", "Burn médio Ano 1 (DRE)", BLACK)
-setc(ws5, f"B{r+3}", "='DRE (Realista)'!B14", GREEN, CUR)
-for col, w in zip("ABCD", [34, 12, 18, 4]):
+setc(ws5, "A1", "Sensibilidade — payback (meses) da economia BRUTA vs gaps/mês × automatizável%", TITLE, border=False)
+setc(ws5, "A2", "Mostra que mesmo combinações otimistas raramente pagam R$1,5mi em <30 meses só pela defensiva.", SUB, border=False)
+ws5.merge_cells("A1:G1"); ws5.merge_cells("A2:G2")
+gaps_axis = [300, 500, 700, 1000, 1500]
+aut_axis = [0.30, 0.45, 0.60, 0.75]
+setc(ws5, "A4", "gaps/mês ↓  |  automatizável% →", BOLD, fill=LBLUE)
+for j, a in enumerate(aut_axis):
+    setc(ws5, f"{chr(66+j)}4", a, WHITE_BOLD, PCT, fill=NAVY, align="center")
+for i, g in enumerate(gaps_axis):
+    rr = 5 + i
+    setc(ws5, f"A{rr}", g, BOLD, NUM, fill=LBLUE, align="center")
+    for j, a in enumerate(aut_axis):
+        # economia bruta = parcela(prep*%gap) * aut ; payback = INV / economia
+        col = chr(66 + j)
+        setc(ws5, f"{col}{rr}", f"={INV}/(({PREP}*{PGAP})*{a})", BLACK, DEC, align="center")
+setc(ws5, "A11", "Leitura: a parcela de prepostos é fixa (não depende do nº de gaps), por isso a defensiva tem teto de economia. Volume de gap importa para a RECEITA do HM e para o valor de cobertura, não para o payback via prepostos.", SUB, border=False)
+ws5.merge_cells("A11:G12")
+for col, w in zip("ABCDEFG", [26, 12, 12, 12, 12, 4, 4]):
     ws5.column_dimensions[col].width = w
-
-# ---------------------------------------------------------------- ROI COAPH / ECONOMIA OPERACIONAL
-ws6 = wb.create_sheet("ROI Coaph", 1)  # 2ª aba — tese defensiva
-ws6.sheet_view.showGridLines = False
-setc(ws6, "A1", "ROI Coaph — Economia Operacional (tese defensiva)", TITLE, border=False)
-setc(ws6, "A2", "Economia na operação da PRÓPRIA Coaph ao automatizar a gestão de plantões. NÃO é receita do HealthMatch — é a justificativa estratégica do investimento pela Coaph (paga-se mesmo sem escala externa).", SUB, border=False)
-ws6.merge_cells("A1:F1"); ws6.merge_cells("A2:F2")
-
-setc(ws6, "A4", "Premissas (editáveis)", BOLD, fill=LBLUE); ws6.merge_cells("A4:C4")
-setc(ws6, "A5", "Custo atual/mês com prepostos e operação manual", BLACK)
-setc(ws6, "B5", 240000, BLUE, CUR, fill=YEL)
-setc(ws6, "A6", "Investimento total (pre-seed)", BLACK)
-setc(ws6, "B6", 1500000, BLUE, CUR, fill=YEL)
-setc(ws6, "A7", "Custo anual atual com prepostos", BLACK)
-setc(ws6, "B7", "=B5*12", BLACK, CUR, fill=GREY)
-
-setc(ws6, "A9", "Cenários de economia → payback do investimento", BOLD, fill=LBLUE); ws6.merge_cells("A9:F9")
-hdr(ws6, 10, 1, ["Cenário", "% economia", "Economia/mês", "Economia/ano", "Payback (meses)", "ROI anual"])
-scen_roi = [("Conservador", 0.25), ("Realista", 0.50), ("Otimista", 0.75), ("Teto teórico (não usar como base)", 1.00)]
-rr = 11
-for name, pct in scen_roi:
-    is_real = name == "Realista"
-    setc(ws6, f"A{rr}", name, BOLD if is_real else BLACK, fill=LBLUE if is_real else None)
-    setc(ws6, f"B{rr}", pct, BLUE, PCT, fill=YEL)
-    setc(ws6, f"C{rr}", f"=$B$5*B{rr}", BLACK, CUR, fill=LBLUE if is_real else None)
-    setc(ws6, f"D{rr}", f"=C{rr}*12", BLACK, CUR)
-    setc(ws6, f"E{rr}", f"=$B$6/C{rr}", BLACK, '#,##0.0', fill=LBLUE if is_real else None)
-    setc(ws6, f"F{rr}", f"=D{rr}/$B$6", BLACK, PCT)
-    rr += 1
-setc(ws6, f"A{rr+1}", "Base de defesa do investimento: 25% (conservador) a 50% (realista). 100% é teto teórico — exigiria redesenho operacional total e NÃO deve ser premissa-base.", SUB, border=False)
-ws6.merge_cells(f"A{rr+1}:F{rr+1}")
-setc(ws6, f"A{rr+2}", "Importante: esta economia NÃO se soma à receita do HealthMatch (abas Cenários/DRE). São lentes distintas — a economia justifica o aporte da Coaph; a receita é o upside da escala externa.", SUB, border=False)
-ws6.merge_cells(f"A{rr+2}:F{rr+2}")
-for col, w in zip("ABCDEF", [34, 11, 15, 15, 16, 12]):
-    ws6.column_dimensions[col].width = w
 
 wb.save("/Users/daniel/Projects/HealthMatch/business-plan/HealthMatch_Modelo_Financeiro.xlsx")
 print("saved")
