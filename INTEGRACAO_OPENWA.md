@@ -56,6 +56,40 @@ Servidor Ubuntu na rede local (sem firewall). Use o IP da LAN do Ubuntu
   `0.0.0.0:2785` em `/root/openwa/docker-compose.yml` (para abrir o dashboard/QR do Mac).
   A API segue protegida por `X-API-Key`.
 
+## Troubleshooting: dashboard "não abre" / página em branco no Mac
+
+**Sintoma:** `curl` retorna 200, mas no browser do Mac (`http://192.168.1.147:2785`)
+a página fica em branco.
+
+**Causa-raiz:** o OpenWA (helmet, em `NODE_ENV=production`) envia o header
+`Content-Security-Policy: ... upgrade-insecure-requests`. Essa diretiva faz o browser
+re-buscar os assets (`/assets/*.js`) em **https**://192.168.1.147:2785 — que não tem
+TLS → falha → tela branca. `localhost` é isento (loopback é "secure context"), por isso
+funciona no servidor mas não no Mac. (O HSTS recebido via http é ignorado por spec; o
+vilão é só o `upgrade-insecure-requests`.) Origem no código: `src/main.ts:186`
+(`upgradeInsecureRequests: NODE_ENV==='production' ? [] : null`).
+
+**Correção aplicada (LAN/piloto):** rodar o OpenWA fora de produção, o que remove a
+diretiva. Em `/root/openwa/.env`:
+
+```ini
+NODE_ENV=development
+```
+…e `cd /root/openwa && docker compose up -d openwa-api`. Verifique:
+```bash
+curl -sD - -o /dev/null http://192.168.1.147:2785/ | grep -i content-security-policy
+# NÃO deve mais conter "upgrade-insecure-requests"
+```
+No Mac, dê um **hard refresh** (Cmd+Shift+R) para descartar a página em branco em cache.
+
+**Alternativas mais seguras (hardening, recomendadas p/ produção):**
+- **Túnel SSH** (não expõe nada na LAN, e `localhost` é isento do upgrade):
+  ```bash
+  ssh -L 2785:localhost:2785 usuario@192.168.1.147   # no Mac; depois abra http://localhost:2785
+  ```
+  Aqui pode manter `NODE_ENV=production` e o bind em `127.0.0.1`.
+- **Proxy reverso TLS** (Caddy/nginx) na frente do OpenWA → origem https satisfaz o CSP.
+
 ## Passos manuais (exigem o celular — não automatizáveis)
 
 1. **Criar sessão + QR:** abra http://localhost:2785, crie a sessão `default` e
