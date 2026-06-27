@@ -54,12 +54,13 @@ export class OpenWaProvider implements WhatsAppProvider {
     if (!this.isConfigured()) {
       return { status: 'FAILED', errorCode: 'NOT_CONFIGURED', errorMessage: 'OpenWA não configurado.' };
     }
-    const url = `${this.baseUrl}/api/sendText`;
-    const requestPayload = { session: this.session, chatId: this.toChatId(msg.to), text: msg.body };
+    // Contrato real do rmyndharis/OpenWA: a sessão vai na URL; corpo {chatId,text}.
+    const url = `${this.baseUrl}/api/sessions/${encodeURIComponent(this.session)}/messages/send-text`;
+    const requestPayload = { chatId: this.toChatId(msg.to), text: msg.body };
     try {
       const res = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'X-Api-Key': process.env.OPENWA_API_KEY! },
+        headers: { 'Content-Type': 'application/json', 'X-API-Key': process.env.OPENWA_API_KEY! },
         body: JSON.stringify(requestPayload),
       });
       const json: any = await res.json().catch(() => ({}));
@@ -74,7 +75,7 @@ export class OpenWaProvider implements WhatsAppProvider {
       }
       return {
         status: 'SENT',
-        externalMessageId: json?.id ?? json?.messageId ?? json?.key?.id,
+        externalMessageId: json?.messageId ?? json?.id?._serialized ?? json?.id ?? json?.key?.id,
         requestPayload,
         responsePayload: json,
       };
@@ -94,29 +95,33 @@ export class OpenWaProvider implements WhatsAppProvider {
 
   parseInbound(req: WebhookRequest): NormalizedInbound | null {
     const b = req.body;
-    if (b.event && b.event !== 'message' && b.event !== 'message.any') return null;
-    const p = b.payload ?? b;
+    const ev = b.event ?? b.type;
+    if (ev && !['message', 'message.received', 'message.any'].includes(ev)) return null;
+    const p = b.payload ?? b.data ?? b;
     // Ignora ecos de mensagens enviadas por nós.
     if (p.fromMe === true) return null;
-    const from = p.from ?? p.author ?? p.chatId;
+    // Campo do OpenWA é `sender` (telefone@c.us); demais como fallback.
+    const from = p.sender ?? p.from ?? p.author ?? p.chatId;
     const body = p.body ?? p.text ?? p.content;
     if (!from || body == null) return null;
+    const id = p.messageId ?? p.id?._serialized ?? p.id;
     return {
       from: normalizePhone(from),
-      to: normalizePhone(p.to),
+      to: normalizePhone(p.recipient ?? p.to),
       body: String(body),
-      externalMessageId: p.id?._serialized ?? p.id ?? p.messageId,
-      externalEventId: p.id?._serialized ?? p.id ?? p.messageId,
+      externalMessageId: id,
+      externalEventId: id,
       raw: b,
     };
   }
 
   parseStatus(req: WebhookRequest): DeliveryUpdate | null {
     const b = req.body;
-    if (b.event && !['message.ack', 'ack', 'state'].includes(b.event)) return null;
-    const p = b.payload ?? b;
-    const ack = p.ack ?? p.status;
-    const id = p.id?._serialized ?? p.id ?? p.messageId;
+    const ev = b.event ?? b.type;
+    if (ev && !['message.ack', 'ack', 'message.status', 'session.status'].includes(ev)) return null;
+    const p = b.payload ?? b.data ?? b;
+    const ack = p.ack ?? p.status ?? p.state;
+    const id = p.messageId ?? p.id?._serialized ?? p.id;
     if (ack == null || !id) return null;
     const mapped = OPENWA_STATUS_MAP[String(ack).toLowerCase()];
     if (!mapped) return null;

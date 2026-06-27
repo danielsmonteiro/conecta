@@ -40,6 +40,13 @@ services:
       COOKIE_SECURE: 'false'
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@healthmatch.local}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-changeme123}
+      # OpenWA (app separado, na rede compartilhada openwa-network). Default de
+      # envio segue Twilio; OpenWA é opt-in (MESSAGING_PROVIDER=openwa por conversa/teste).
+      OPENWA_BASE_URL: http://openwa-api:2785
+      OPENWA_API_KEY: ${OPENWA_API_KEY:-}
+      OPENWA_SESSION: ${OPENWA_SESSION:-default}
+      OPENWA_WEBHOOK_SECRET: ${OPENWA_WEBHOOK_SECRET:-}
+      OPENWA_VALIDATE_WEBHOOK: ${OPENWA_VALIDATE_WEBHOOK:-true}
     command: >
       sh -c "npx prisma db push --accept-data-loss &&
              (npm run db:seed || true) &&
@@ -49,6 +56,9 @@ services:
       - /app/node_modules
     ports:
       - '3000:3000'
+    networks:
+      - default
+      - openwa
 
   frontend:
     build:
@@ -68,3 +78,12 @@ services:
 
 volumes:
   pgdata:
+
+networks:
+  # Rede do app (db, backend, frontend).
+  default:
+  # Rede compartilhada com o app OpenWA (criada pelo compose do OpenWA).
+  # Permite backend → http://openwa-api:2785 e OpenWA → http://backend:3000.
+  openwa:
+    external: true
+    name: openwa-network
