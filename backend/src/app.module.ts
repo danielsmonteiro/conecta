@@ -17,6 +17,7 @@ import { HealthProfessionalsModule } from './health-professionals/health-profess
 import { HealthUnitsModule } from './health-units/health-units.module';
 import { IntegrationsModule } from './integrations/integrations.module';
 import { MatchingModule } from './matching/matching.module';
+import { MessagingModule } from './messaging/messaging.module';
 import { OrganizationsModule } from './organizations/organizations.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PublicAgenciesModule } from './public-agencies/public-agencies.module';
@@ -45,6 +46,7 @@ import { VacanciesModule } from './vacancies/vacancies.module';
     MatchingModule,
     FinancialModule,
     ConversationsModule,
+    MessagingModule,
     AiModule,
     IntegrationsModule,
     DocumentTypesModule,

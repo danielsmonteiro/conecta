@@ -15,6 +15,8 @@ import { IsBoolean, IsIn, IsOptional, IsString, MinLength } from 'class-validato
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PaginationDto, paginate } from '../common/dto/pagination.dto';
 import { PrismaService } from '../prisma/prisma.service';
+import { MessagingModule } from '../messaging/messaging.module';
+import { MessagingService } from '../messaging/messaging.service';
 
 class SendMessageDto {
   @IsString() @MinLength(1) body: string;
@@ -28,7 +30,10 @@ class UpdateConversationDto {
 
 @Injectable()
 export class ConversationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly messaging: MessagingService,
+  ) {}
 
   async list(q: PaginationDto, status?: string) {
     const where = status ? { status: status as any } : {};
@@ -63,24 +68,11 @@ export class ConversationsService {
     return this.prisma.message.findMany({ where: { conversationId: id }, orderBy: { createdAt: 'asc' } });
   }
 
-  // Envia uma mensagem de saída: cria Message + log de saída + atualiza a conversa.
+  // Envia uma mensagem de saída via provedor de WhatsApp (Twilio/OpenWA):
+  // cria Message + log, dispara o envio real e propaga o status de entrega.
   async sendMessage(id: string, dto: SendMessageDto) {
-    const conv = await this.get(id);
-    const [message] = await this.prisma.$transaction([
-      this.prisma.message.create({
-        data: { conversationId: id, direction: 'OUTBOUND', body: dto.body, status: 'QUEUED', sentByAi: !!dto.sentByAi },
-      }),
-      this.prisma.conversation.update({ where: { id }, data: { lastMessageAt: new Date() } }),
-      this.prisma.outboundMessageLog.create({
-        data: {
-          conversationId: id,
-          to: conv.professional?.whatsapp ?? 'unknown',
-          body: dto.body,
-          status: 'QUEUED',
-        },
-      }),
-    ]);
-    return message;
+    await this.get(id);
+    return this.messaging.sendFromConversation(id, dto.body, { sentByAi: dto.sentByAi });
   }
 
   async update(id: string, dto: UpdateConversationDto) {
@@ -121,6 +113,7 @@ export class ConversationsController {
 }
 
 @Module({
+  imports: [MessagingModule],
   controllers: [ConversationsController],
   providers: [ConversationsService],
 })
