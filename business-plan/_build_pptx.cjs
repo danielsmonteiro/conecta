@@ -136,7 +136,26 @@ s.addText("🔹 Sobrepreço e penalidade são as premissas de maior peso — o p
   { x: M, y: 6.55, w: 12.13, h: 0.4, fontFace: F, fontSize: 11.5, italic: true, color: MUT });
 foot(s, 6);
 
-// 7 PAYBACK (dark)
+// 7 RECEITA / VAGAS OCIOSAS
+s = p.addSlide(); bg(s, BG); kicker(s, "Receita incremental"); title(s, "Dinheiro na mesa: 1/3 das vagas fica ocioso");
+card(s, M, 1.95, 5.55, 4.55, { fill: NAVY });
+s.addText("12.000 contratadas → 8.000 preenchidas", { x: M + 0.4, y: 2.25, w: 4.8, h: 0.5, fontFace: F, fontSize: 15, color: "CADCFC" });
+s.addText("4.000", { x: M + 0.4, y: 2.8, w: 4.8, h: 1.0, fontFace: F, fontSize: 58, bold: true, color: TEAL });
+s.addText("vagas ociosas/mês (33%) por falta de profissionais", { x: M + 0.4, y: 3.95, w: 4.8, h: 0.7, fontFace: F, fontSize: 14, color: "CADCFC" });
+s.addText([{ text: "R$ 3,6 mi/mês", options: { bold: true, color: "FFFFFF", fontSize: 22 } }, { text: "  de GMV na mesa", options: { color: "9FB6D6", fontSize: 13 } }], { x: M + 0.4, y: 5.05, w: 4.8, h: 0.6, fontFace: F });
+const rv = [["💵", MINT, "Receita incremental", "Captura realista (25%) → ~R$ 36 mil/mês de margem para a Coaph."],
+  ["🛡", BLUE, "Retenção de contrato", "O maior valor: a sub-execução crônica ameaça a renovação — preencher protege a receita inteira."],
+  ["👥", TEAL, "Missão cooperativa", "Mais vagas preenchidas = mais trabalho e renda aos cooperados."]];
+rv.forEach((c, i) => { const y = 1.95 + i * 1.55; card(s, 6.5, y, 6.23, 1.4);
+  iconCircle(s, 6.8, y + 0.4, 0.62, c[1], c[0]);
+  s.addText(c[2], { x: 7.6, y: y + 0.22, w: 4.9, h: 0.4, fontFace: F, fontSize: 15.5, bold: true, color: NAVY });
+  s.addText(c[3], { x: 7.6, y: y + 0.64, w: 4.95, h: 0.72, fontFace: F, fontSize: 12, color: MUT });
+});
+s.addText("🔹 Margem fina (<5%): o ganho próprio em R$ é modesto; o valor está na retenção de contrato e na renda dos cooperados.",
+  { x: M, y: 6.72, w: 12.13, h: 0.4, fontFace: F, fontSize: 11, italic: true, color: MUT });
+foot(s, 7);
+
+// 8 PAYBACK (dark)
 s = p.addSlide(); bg(s, NAVY);
 s.addShape(p.ShapeType.ellipse, { x: 10.2, y: -2.2, w: 6.5, h: 6.5, fill: { color: "12386B" } });
 kicker(s, "Payback", TEAL); title(s, "O piloto se paga em poucos meses", { color: "FFFFFF" });
@@ -150,7 +169,7 @@ pb.forEach((c, i) => {
   s.addText(c[0], { x: 7.2, y: y + 0.2, w: 5.2, h: 0.4, fontFace: F, fontSize: 13.5, color: "CADCFC" });
   s.addText(c[1], { x: 7.2, y: y + 0.58, w: 5.2, h: 0.55, fontFace: F, fontSize: 22, bold: true, color: c[2] });
 });
-foot(s, 7, true);
+foot(s, 8, true);
 
 // 8 MODELO DE RECEITA
 s = p.addSlide(); bg(s, BG); kicker(s, "Modelo de receita"); title(s, "Margem da cooperativa < 5% → receita desacoplada do GMV");
@@ -166,7 +185,7 @@ s.addText("Pequena taxa por cobertura, capada no teto da margem. Alinha receita 
 s.addText([{ text: "≤ 2%", options: { bold: true, color: TEAL, fontSize: 28 } }, { text: "  ≈ R$ 24/plantão médico", options: { color: "CADCFC", fontSize: 13 } }], { x: 7.18, y: 4.3, w: 5.15, h: 0.6, fontFace: F });
 s.addText("Take-rate gordo sobre GMV não se aplica neste mercado. Receita HM vinda da Coaph ≈ R$ 18,8 mil/mês.",
   { x: M, y: 5.85, w: 12, h: 0.5, fontFace: F, fontSize: 14, italic: true, color: INK, align: "center" });
-foot(s, 8);
+foot(s, 9);
 
 // 9 KPIs
 s = p.addSlide(); bg(s, BG); kicker(s, "Como medimos sucesso"); title(s, "KPIs do piloto — economia do gap, não só uso");
@@ -181,7 +200,7 @@ kpis.forEach((c, i) => {
 });
 s.addText("Baseline antes do piloto · comitê mensal Coaph + HealthMatch acompanha o ROI e destrava a rodada plena.",
   { x: M, y: 6.35, w: 12.13, h: 0.5, fontFace: F, fontSize: 12.5, italic: true, color: INK, align: "center" });
-foot(s, 9);
+foot(s, 10);
 
 // 10 RECOMENDAÇÃO
 s = p.addSlide(); bg(s, BG); kicker(s, "A recomendação"); title(s, "Piloto-first: barato, rápido, com dado no fim");
@@ -201,7 +220,7 @@ s.addText([
   { text: " e prova o custo real do gap (sobrepreço + penalidade). ", options: { color: MUT } },
   { text: "Pior caso: a Coaph fica com uma contingência mais barata — sem arriscar R$ 1,5 mi.", options: { bold: true, color: BLUE } }],
   { x: 7.18, y: 2.65, w: 5.2, h: 3.6, fontFace: F, fontSize: 13.5, color: MUT, valign: "top", lineSpacingMultiple: 1.05 });
-foot(s, 10);
+foot(s, 11);
 
 // 11 UPSIDE / ESCALA
 s = p.addSlide(); bg(s, BG); kicker(s, "Upside · escala (ofensiva)"); title(s, "Se replicar: um SaaS de contingência previsível");
@@ -216,7 +235,7 @@ s.addText("Modesto e previsível — não um foguete de marketplace. A rodada de
   { x: M, y: 5.2, w: 12, h: 0.5, fontFace: F, fontSize: 14, italic: true, color: INK });
 s.addText("🔹 Receita/cliente ≈ realista da Coaph. Comps: Nomad, Trusted, Medely, ShiftMed, Patchwork validam a categoria.",
   { x: M, y: 6.55, w: 12.13, h: 0.4, fontFace: F, fontSize: 11.5, italic: true, color: MUT });
-foot(s, 11);
+foot(s, 12);
 
 // 12 ROADMAP
 s = p.addSlide(); bg(s, BG); kicker(s, "Roadmap"); title(s, "Do piloto à economia comprovada — e à escala");
@@ -234,7 +253,7 @@ ph.forEach((c, i) => {
     s.addText(tx, { x: x + 0.62, y: y - 0.1, w: 3.05, h: 0.7, fontFace: F, fontSize: 12.5, color: INK, valign: "top" });
   });
 });
-foot(s, 12);
+foot(s, 13);
 
 // 13 FECHAMENTO
 s = p.addSlide(); bg(s, NAVY);

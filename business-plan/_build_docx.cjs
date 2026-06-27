@@ -119,8 +119,8 @@ const s1 = [
   lead("O cliente-âncora é a Coaph,", " que hoje sustenta uma operação manual de prepostos (~R$ 240 mil/mês) e arca com o custo do gap: telefonemas, sobrepreço de cobertura emergencial e penalidade/risco quando o plantão fica descoberto."),
   H2("Duas teses, separadas e honestas"),
   table([1700, 3663, 3663], ["", "Tese defensiva", "Tese ofensiva"], [
-    [{ v: "Lógica", bold: true }, "Reduzir o custo do gap dentro da Coaph", "Escalar a contingência para outras cooperativas/hospitais"],
-    [{ v: "Métrica", bold: true }, "Economia operacional mensal", "Receita recorrente (SaaS de prontidão + fee)"],
+    [{ v: "Lógica", bold: true }, "Cortar o custo do gap e capturar receita de vagas ociosas na Coaph", "Escalar a contingência para outras cooperativas/hospitais"],
+    [{ v: "Métrica", bold: true }, "Economia operacional + margem de vagas recuperadas", "Receita recorrente (SaaS de prontidão + fee)"],
     [{ v: "Papel", bold: true }, "Justifica o PILOTO", "Justifica a rodada plena (futura)"],
   ], { firstBold: true }),
   spacer(80),
@@ -128,6 +128,7 @@ const s1 = [
   bullet("Cobre o gap, não a escala inteira → volume menor, foco maior."),
   bullet("Margem da cooperativa < 5% → monetização híbrida: SaaS de prontidão + fee por gap capado em ≤ 2%. Take-rate gordo sobre GMV foi descartado."),
   bullet("Investimento redimensionado: o ask agora é um piloto de R$ 300 mil (payback ~2,6 meses, realista) que prova as premissas antes de qualquer rodada maior."),
+  bullet("Nova alavanca — receita incremental: a Coaph executa só ~8.000 de 12.000 vagas contratadas (~1/3 ociosas). Preencher parte gera receita que hoje fica na mesa e protege a renovação dos contratos."),
   spacer(60),
   table([3200, 5826], ["Item", "Resumo"], [
     ["Produto", "Camada de contingência (gap-filling) com matching + IA no WhatsApp + financeiro"],
@@ -135,6 +136,8 @@ const s1 = [
     ["Monetização", "SaaS de prontidão (R$ 8 mil/mês) + fee por gap (≤ 2% do plantão)"],
     ["Ask atual", "Piloto de R$ 300 mil (payback ~2,6 meses)"],
     ["Economia líquida (Coaph, realista)", "~R$ 114,7 mil/mês"],
+    ["Receita incremental (vagas ociosas)", "+~R$ 36 mil/mês · ~R$ 3,6 mi/mês de GMV na mesa"],
+    ["Benefício total Coaph (realista)", "~R$ 169,5 mil/mês (economia + receita)"],
     ["Rodada plena", "R$ 1,5 mi depois do piloto, justificada pela escala (ofensiva)"],
   ], { firstBold: true }),
   spacer(80),
@@ -195,6 +198,15 @@ const s5 = [
   bullet("A economia depende sobretudo das camadas 2 e 3 (sobrepreço e penalidade) — as premissas mais incertas, que o piloto valida."),
   bullet("Mesmo no conservador, o piloto se paga em ~4 meses."),
   bullet("Como cliente, a Coaph é líquida-positiva todo mês (paga R$ 18,8 mil, economiza R$ 133,5 mil brutos) — assinar é um no-brainer operacional."),
+  H2("Quarta dimensão — receita incremental (vagas ociosas)"),
+  P("A Coaph tem 12.000 vagas contratadas e preenche ~8.000 — ~1/3 (4.000/mês) fica ociosa por falta de profissionais. Isso é ~R$ 3,6 mi/mês de GMV na mesa (4.000 × R$ 900). A plataforma ajuda a capturar parte:"),
+  table([3326, 1900, 1900, 1900], ["Captura das ociosas", "Cons. (15%)", "Real. (25%)", "Otim. (40%)"], [
+    ["Vagas recuperadas/mês", "600", "1.000", "1.600"],
+    [{ v: "Receita incremental Coaph (margem 4%)/mês", bold: true }, { v: "R$ 21,6 mil", fill: LIGHT }, { v: "R$ 36,0 mil", bold: true, fill: LIGHT }, { v: "R$ 57,6 mil", fill: LIGHT }],
+  ], { firstBold: true, hsize: 17 }),
+  spacer(60),
+  bullet("Honesto: por ser cooperativa de margem fina (<5%), o ganho próprio em R$ é modesto (~R$ 36 mil/mês realista). O maior valor é estratégico — a sub-execução crônica ameaça a renovação dos contratos; preencher protege a receita inteira, não só a margem."),
+  bullet("Benefício total Coaph (realista): economia R$ 133,5 mil + receita R$ 36 mil = ~R$ 169,5 mil/mês, o que torna o piloto ainda mais barato de pagar. A defesa conservadora segue ancorada só na economia de custo."),
 ];
 
 // ---------------------------------------------------------------- 6

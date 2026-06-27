@@ -147,6 +147,40 @@ ws3.merge_cells("A18:F19")
 for col, w in zip("ABCD", [44, 14, 14, 14]):
     ws3.column_dimensions[col].width = w
 
+# ============================================================ RECEITA INCREMENTAL COAPH (vagas ociosas)
+ws3b = wb.create_sheet("Receita Incremental Coaph", 2)  # 3ª aba — a alavanca de receita
+ws3b.sheet_view.showGridLines = False
+setc(ws3b, "A1", "Receita incremental da Coaph — preencher vagas ociosas", TITLE, border=False)
+setc(ws3b, "A2", "A Coaph tem contratos que não executa por falta de profissionais. A plataforma ajuda a preencher parte das vagas ociosas → margem que hoje fica na mesa. 🔹 feeling do fundador, sem dados — células editáveis.", SUB, border=False)
+ws3b.merge_cells("A1:F1"); ws3b.merge_cells("A2:G2")
+setc(ws3b, "A4", "Premissas (editáveis)", BOLD, fill=LBLUE); ws3b.merge_cells("A4:C4")
+inp = [("Vagas contratadas/mês", 12000, NUM), ("Vagas preenchidas hoje/mês", 8000, NUM),
+       ("Valor médio da vaga (ponderado, R$)", 900, CUR), ("Margem administrativa da Coaph (<5%)", 0.04, PCT)]
+r = 5
+for n, v, f in inp:
+    setc(ws3b, f"A{r}", n, BLACK); setc(ws3b, f"B{r}", v, BLUE, f, fill=YEL); r += 1
+setc(ws3b, "A9", "Vagas ociosas/mês", BOLD); setc(ws3b, "B9", "=B5-B6", BOLD, NUM, fill=GREY)
+setc(ws3b, "A10", "Taxa de ociosidade", BLACK); setc(ws3b, "B10", "=B9/B5", BLACK, PCT)
+setc(ws3b, "A11", 'GMV ocioso/mês ("dinheiro na mesa")', BOLD); setc(ws3b, "B11", "=B9*B7", BOLD, CUR, fill=GREY)
+setc(ws3b, "A12", "Margem total na mesa/mês (se preenchesse tudo)", BLACK); setc(ws3b, "B12", "=B11*B8", BLACK, CUR)
+setc(ws3b, "A14", "Cenários de captura pela plataforma", BOLD, fill=LBLUE); ws3b.merge_cells("A14:E14")
+hdr(ws3b, 15, 1, ["Métrica", "Conservador", "Realista", "Otimista"])
+setc(ws3b, "A16", "% das ociosas preenchidas via plataforma", BLACK)
+setc(ws3b, "B16", 0.15, BLUE, PCT, fill=YEL); setc(ws3b, "C16", 0.25, BLUE, PCT, fill=YEL); setc(ws3b, "D16", 0.40, BLUE, PCT, fill=YEL)
+setc(ws3b, "A17", "Vagas recuperadas/mês", BLACK)
+for col in "BCD": setc(ws3b, f"{col}17", f"=$B$9*{col}16", BLACK, NUM)
+setc(ws3b, "A18", "GMV recuperado/mês", BLACK)
+for col in "BCD": setc(ws3b, f"{col}18", f"={col}17*$B$7", BLACK, CUR)
+setc(ws3b, "A19", "Receita incremental Coaph (margem) / mês", BOLD)
+for col in "BCD": setc(ws3b, f"{col}19", f"={col}18*$B$8", BOLD, CUR, fill=LBLUE)
+setc(ws3b, "A20", "Receita incremental Coaph / ano", BOLD)
+for col in "BCD": setc(ws3b, f"{col}20", f"={col}19*12", BOLD, CUR)
+setc(ws3b, "A22", "Benefício total Coaph/mês (economia bruta + receita incremental) — realista", BOLD, fill=LBLUE)
+setc(ws3b, "B22", "='Economia Coaph'!C8+C19", BOLD, CUR, fill=LBLUE)
+setc(ws3b, "A24", "Honesto: por ser cooperativa de margem fina (<5%), o ganho próprio em R$ é modesto, mas o GMV na mesa é grande e a sub-execução crônica ameaça a RENOVAÇÃO dos contratos — esse é o maior valor (estratégico). Soma-se ainda mais trabalho/renda aos cooperados.", SUB, border=False)
+ws3b.merge_cells("A24:G26")
+for col, w in zip("ABCDEFG", [46, 14, 14, 14, 6, 4, 4]): ws3b.column_dimensions[col].width = w
+
 # ============================================================ RECEITA HM (escala — ofensiva)
 ws4 = wb.create_sheet("Receita HM (escala)")
 ws4.sheet_view.showGridLines = False

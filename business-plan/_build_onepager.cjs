@@ -61,6 +61,10 @@ const children = [
     ["Rodada plena (R$ 1,5 mi) — depois", "~20 m", "~13 m", "~8 m"],
   ]),
 
+  h("Receita incremental (vagas ociosas)"),
+  pp([t("A Coaph executa ~8.000 de 12.000 vagas (~1/3 ociosas) → "), t("~R$ 3,6 mi/mês de GMV na mesa", { bold: true }),
+     t(". Preencher parte traz ~R$ 36 mil/mês de margem (realista) e — o maior valor — "), t("protege a renovação dos contratos", { bold: true }), t(".")]),
+
   h("Monetização (margem da cooperativa < 5%)"),
   pp([t("SaaS de prontidão R$ 8 mil/mês", { bold: true }), t(" (acesso ao pool) + "),
      t("fee por gap capado em ≤ 2%", { bold: true }), t(" do plantão (≈ R$ 24 num plantão médico de R$ 1.200). Take-rate gordo sobre GMV não se aplica.")]),
