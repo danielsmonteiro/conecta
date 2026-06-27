@@ -26,12 +26,32 @@ interface Outbound {
   status: string;
   createdAt: string;
 }
+interface Adapter {
+  key: string;
+  official: boolean;
+  configured: boolean;
+  isDefault: boolean;
+}
 
 const provCols: Column<Provider>[] = [
   { header: 'Provedor', render: (r) => <span className="font-medium text-hm-text">{r.provider}</span> },
   { header: 'Canal', render: (r) => <span className="text-hm-text-muted">{r.channel}</span> },
   { header: 'Habilitado', render: (r) => (r.enabled ? <span className="text-hm-success">sim</span> : <span className="text-hm-text-subtle">não</span>) },
   { header: 'Configurado', render: (r) => (r.configured ? <span className="text-hm-success">sim</span> : <span className="text-hm-warning">não</span>) },
+];
+const adapterCols: Column<Adapter>[] = [
+  { header: 'Canal', render: (r) => <span className="font-medium text-hm-text">{r.key === 'twilio' ? 'Twilio' : r.key === 'openwa' ? 'OpenWA' : r.key}</span> },
+  {
+    header: 'Tipo',
+    render: (r) =>
+      r.official ? (
+        <span className="text-hm-success">Oficial</span>
+      ) : (
+        <span className="text-hm-warning" title="Automação do WhatsApp Web — risco de ban. Use número dedicado.">Não-oficial ⚠</span>
+      ),
+  },
+  { header: 'Configurado', render: (r) => (r.configured ? <span className="text-hm-success">sim</span> : <span className="text-hm-text-subtle">não</span>) },
+  { header: 'Padrão', render: (r) => (r.isDefault ? <span className="text-hm-primary">ativo</span> : <span className="text-hm-text-subtle">—</span>) },
 ];
 const outCols: Column<Outbound>[] = [
   { header: 'Para', render: (r) => <span className="text-hm-text-muted">{r.to}</span> },
@@ -45,6 +65,7 @@ export default function IntegracoesPage() {
   const status = useApi<Status>('/integrations/messaging/status');
   const providers = useApi<Provider[]>('/integrations/messaging/providers');
   const outbound = useApi<Paged<Outbound>>('/integrations/outbound-message-logs?limit=10');
+  const adapters = useApi<Adapter[]>('/integrations/messaging/adapters');
   const s = status.data;
   return (
     <div className="space-y-6">
@@ -57,6 +78,10 @@ export default function IntegracoesPage() {
           <StatCard label="Validação de assinatura" value={yn(s.validateSignatureEnabled)} />
         </div>
       )}
+      <Panel title="Canais de WhatsApp">
+        <p className="mb-3 text-sm text-hm-text-muted">Twilio (oficial) é o padrão recomendado para o piloto; OpenWA é não-oficial.</p>
+        <DataTable columns={adapterCols} rows={adapters.data ?? null} loading={adapters.loading} error={adapters.error} empty="Nenhum canal." />
+      </Panel>
       <Panel title="Provedores">
         <DataTable columns={provCols} rows={providers.data ?? null} loading={providers.loading} error={providers.error} empty="Nenhum provedor." />
       </Panel>

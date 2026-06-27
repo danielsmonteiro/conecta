@@ -42,6 +42,17 @@ export class MessagingService implements OnModuleInit {
     return [...this.providers.values()];
   }
 
+  /** Descritor dos adapters para a UI (fonte única de verdade do registro). */
+  describeProviders() {
+    const def = process.env.MESSAGING_PROVIDER ?? 'twilio';
+    return this.listProviders().map((p) => ({
+      key: p.key,
+      official: p.official,
+      configured: p.isConfigured(),
+      isDefault: p.key === def,
+    }));
+  }
+
   /**
    * Cria a Message OUTBOUND + OutboundMessageLog (QUEUED) e tenta o envio.
    * Usado pela tela de Conversas e (futuramente) pela IA.

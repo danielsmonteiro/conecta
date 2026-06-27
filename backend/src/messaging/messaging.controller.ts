@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Req, UseGuards } from '@nestjs/common';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { MessagingService } from './messaging.service';
@@ -28,6 +28,12 @@ export class WebhooksController {
 @UseGuards(JwtAuthGuard)
 export class MessagingAdminController {
   constructor(private readonly messaging: MessagingService) {}
+
+  // Lista os adapters disponíveis (oficial/não-oficial, configurado, padrão).
+  @Get('adapters')
+  adapters() {
+    return this.messaging.describeProviders();
+  }
 
   @Post('test-send')
   test(@Body() body: { conversationId: string; body: string; provider?: string }) {
