@@ -32,7 +32,10 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-healthmatch}:${POSTGRES_PASSWORD:-healthmatch}@db:5432/${POSTGRES_DB:-healthmatch}?schema=public
       PORT: '3000'
-      CORS_ORIGIN: http://localhost:3001
+      # O frontend é proxy same-origin (/api), então CORS normalmente nem entra em
+      # jogo. Mantemos origens da LAN liberadas caso o backend (:3000) seja chamado
+      # direto do browser de outra máquina. Ajuste CORS_ORIGIN no .env para seu IP.
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3001,http://192.168.1.147:3001,http://192.168.1.208:3001}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret}
       JWT_ACCESS_TTL: '900'

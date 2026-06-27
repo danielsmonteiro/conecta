@@ -39,6 +39,23 @@ docker compose up -d --build      # perfil padrão: sqlite, sem redis/minio
 - `.env` (git-ignored) guarda `OPENWA_API_KEY`. Subir normalmente: `docker compose up -d`.
 - A tela **Integrações → Canais de WhatsApp** mostra `openwa` como `configured`.
 
+## Acesso pela LAN (ex.: do MacBook)
+
+Servidor Ubuntu na rede local (sem firewall). Use o IP da LAN do Ubuntu
+(detectado: `192.168.1.147`). Todos os serviços ouvem em `0.0.0.0`:
+
+| Serviço | URL (do Mac) |
+|---|---|
+| App HealthMatch | http://192.168.1.147:3001 (login `admin@healthmatch.local` / `changeme123`) |
+| API backend | http://192.168.1.147:3000/api |
+| Dashboard OpenWA (QR) | http://192.168.1.147:2785 |
+
+- O frontend é **proxy same-origin** (`/api`), então login/cookies funcionam do Mac
+  sem CORS. As origens da LAN também estão liberadas no CORS do backend por garantia.
+- **Ajuste feito no OpenWA:** o bind da porta passou de `127.0.0.1:2785` para
+  `0.0.0.0:2785` em `/root/openwa/docker-compose.yml` (para abrir o dashboard/QR do Mac).
+  A API segue protegida por `X-API-Key`.
+
 ## Passos manuais (exigem o celular — não automatizáveis)
 
 1. **Criar sessão + QR:** abra http://localhost:2785, crie a sessão `default` e
