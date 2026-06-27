@@ -62,16 +62,27 @@ Critérios de aceite (DoD) são intencionalmente verificáveis.
 
 Sem canal real não há camada de contingência. Hoje a mensagem morre no banco.
 
-- [ ] Instalar e configurar SDK Twilio; `MessagingProvider` real lendo config de env.
-- [ ] Serviço de **envio** que consome `OutboundMessageLog` (`QUEUED → SENT/DELIVERED/FAILED`),
+Arquitetura adotada: **interface única `WhatsAppProvider` + adapters plugáveis**
+(`backend/src/messaging/`). Twilio (oficial, default do piloto) e OpenWA (não-oficial,
+número dedicado). Sem novas dependências de runtime (`fetch` + `crypto` nativos).
+
+- [x] Adapter Twilio via REST (sem SDK) lendo config de env.
+- [x] Serviço de **envio** que consome `OutboundMessageLog` (`QUEUED → SENT/FAILED`),
       gravando `externalMessageId`, `requestPayload`, `responsePayload`, `errorCode`.
-- [ ] **Webhook inbound** `POST /api/integrations/webhooks/twilio` com **validação de
-      assinatura** → grava `WebhookLog` → cria `Message` INBOUND → abre/atualiza `Conversation`.
-- [ ] Fila + retry (introduzir `@nestjs/schedule` ou BullMQ+Redis — hoje ausentes).
-- [ ] Status de entrega (delivery receipts) atualizando `Message.status`.
+- [x] **Webhook inbound** `POST /api/integrations/webhooks/:provider` com **validação de
+      assinatura** (Twilio HMAC-SHA1) → grava `WebhookLog` → cria `Message` INBOUND → conversa.
+- [x] Fila + retry simples (drain em memória, single-instance). ⬅ trocar por BullMQ no Épico 3/7.
+- [x] Status de entrega (delivery receipts) → `OutboundMessageLog.status`.
+- [x] UI: tela de Integrações lista os adapters (oficial × não-oficial, padrão).
+- [ ] **Templates do Twilio** p/ mensagem proativa (janela 24h) — ponte p/ Épico 2.
+- [ ] **Validação de build + teste E2E** com sandbox Twilio (pendente: ambiente sem Node).
+- [ ] Status de sessão/QR do OpenWA na UI.
 
 **DoD:** enviar de uma conversa entrega no WhatsApp real (sandbox Twilio); responder no
 WhatsApp cria `Message` INBOUND visível na tela de Conversas; logs preenchidos.
+
+> **Status (2026-06-27):** fundação implementada (commits `38fe283`, `8789fc2`). Falta
+> compilar/testar — o ambiente de desenvolvimento atual não tem toolchain Node.
 
 ---
 
