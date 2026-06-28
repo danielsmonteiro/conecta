@@ -1,0 +1,35 @@
+# Overlay de proxy reverso + TLS. Aditivo: não altera o compose base.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.proxy.yml up -d
+#   (para prod: troque o primeiro -f por docker-compose.prod.yml)
+#
+# O nome de domínio é parametrizado por APP_DOMAIN no .env. Tudo deriva dele.
+name: healthmatch-dev
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?defina APP_DOMAIN no .env}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+  # Injeta a identidade pública derivada de APP_DOMAIN (merge com o compose base).
+  backend:
+    environment:
+      PUBLIC_BASE_URL: https://${APP_DOMAIN}
+      CORS_ORIGIN: https://${APP_DOMAIN}
+      COOKIE_SECURE: 'true'
+
+volumes:
+  caddy_data:
+  caddy_config:

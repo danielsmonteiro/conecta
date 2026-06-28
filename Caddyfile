@@ -1,0 +1,12 @@
+# Proxy reverso do Conecta. O domínio vem 100% de APP_DOMAIN (.env) — trocar o
+# nome = trocar essa env e recriar o caddy; o certificado TLS é reemitido sozinho.
+{
+	email {$ACME_EMAIL}
+}
+
+{$APP_DOMAIN} {
+	encode gzip zstd
+	# HTTPS automático (Let's Encrypt). Encaminha tudo ao frontend (Next), que por
+	# sua vez faz proxy same-origin de /api para o backend.
+	reverse_proxy frontend:3000
+}
