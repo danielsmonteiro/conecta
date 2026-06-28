@@ -1,6 +1,7 @@
-import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, OnModuleInit, forwardRef } from '@nestjs/common';
 import { ProviderType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { AiEngineService } from '../ai/ai-engine.service';
 import { TwilioProvider } from './providers/twilio.provider';
 import { OpenWaProvider } from './providers/openwa.provider';
 import { NormalizedInbound, WebhookRequest, WhatsAppProvider } from './whatsapp-provider.interface';
@@ -22,6 +23,7 @@ export class MessagingService implements OnModuleInit {
     private readonly prisma: PrismaService,
     twilio: TwilioProvider,
     openwa: OpenWaProvider,
+    @Inject(forwardRef(() => AiEngineService)) private readonly aiEngine: AiEngineService,
   ) {
     this.providers.set(twilio.key, twilio);
     this.providers.set(openwa.key, openwa);
@@ -257,7 +259,9 @@ export class MessagingService implements OnModuleInit {
         data: { lastMessageAt: new Date(), lastMessagePreview: inbound.body.slice(0, 140) },
       }),
     ]);
-    // TODO (Épico 2): se conversation.aiEnabled → acionar o motor de IA aqui.
+    // Épico 2: aciona o motor de IA se a conversa tiver IA habilitada (a própria
+    // checagem de aiEnabled/autoReply/status fica no engine; nunca lança aqui).
+    await this.aiEngine.onInbound(conversation.id).catch((e) => this.logger.error(`IA onInbound: ${e?.message}`));
   }
 
   private async applyStatus(status: { externalMessageId: string; status: any }) {

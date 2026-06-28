@@ -57,6 +57,16 @@ services:
       OPENWA_SESSION: ${OPENWA_SESSION:-default}
       OPENWA_WEBHOOK_SECRET: ${OPENWA_WEBHOOK_SECRET:-}
       OPENWA_VALIDATE_WEBHOOK: ${OPENWA_VALIDATE_WEBHOOK:-true}
+      # IA (Épico 2). Provedor default = OpenAI; segredos via .env (git-ignored).
+      AI_ENABLED: ${AI_ENABLED:-true}
+      AI_PROVIDER: ${AI_PROVIDER:-openai}
+      AI_MODEL: ${AI_MODEL:-gpt-4o-mini}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_AUTO_REPLY: ${AI_AUTO_REPLY:-true}
+      AI_DRY_RUN: ${AI_DRY_RUN:-true}
+      AI_REQUIRE_HUMAN: ${AI_REQUIRE_HUMAN:-true}
+      AI_MAX_CONTEXT_MESSAGES: ${AI_MAX_CONTEXT_MESSAGES:-20}
     command: >
       sh -c "npx prisma db push --accept-data-loss &&
              (npm run db:seed || true) &&

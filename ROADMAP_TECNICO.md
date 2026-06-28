@@ -89,18 +89,25 @@ WhatsApp cria `Message` INBOUND visível na tela de Conversas; logs preenchidos.
 ### 🔴 Épico 2 — Motor de IA no WhatsApp (Anthropic)
 **O coração do v4 · ~5–7 semanas · depende de: Épico 1**
 
-- [ ] Instalar SDK Anthropic; serviço de conversação acionado por `Message` INBOUND.
-- [ ] Montagem de contexto respeitando `maxContextMessages`; modelo configurável
-      (`AI_MODEL`, default `claude-haiku-4-5`).
-- [ ] **Tool-use**: `consultarDisponibilidade`, `proporPlantao`, `confirmarCobertura`,
-      `acionarHandoffHumano` — cada execução grava `AiConversationRun`
-      (trigger, dryRun, inputMessagesCount, outputMessage, toolCallsCount, actionsCount).
-- [ ] **Handoff humano** em ações críticas (`requireHumanForCriticalActions`) →
-      conversa vai para `WAITING_HUMAN`.
-- [ ] `dryRun` e `autoReplyEnabled` realmente operantes (hoje só lidos por `ai/status`).
+Provedor default: **OpenAI** (`gpt-4o-mini`), abstraído por interface (`ai/llm/`) —
+Anthropic plugável depois. Sem SDK (REST via `fetch`).
 
-**DoD:** com `autoReplyEnabled=true`, a IA aborda o profissional, negocia e confirma um
-plantão de teste; em ação crítica, faz handoff; `AiConversationRun` reflete a execução.
+- [x] Provedor de IA acionado por `Message` INBOUND (`AiEngineService.onInbound`).
+- [x] Contexto respeitando `maxContextMessages`; modelo configurável (`AI_MODEL`).
+- [x] **Tool-use**: `consultar_vaga`, `registrar_resposta`, `transferir_para_humano` —
+      cada run grava `AiConversationRun` (trigger, dryRun, inputMessagesCount,
+      outputMessage, toolCallsCount, actionsCount, tokensUsed, outcome).
+- [x] **Handoff humano** em ação crítica (`AI_REQUIRE_HUMAN`) → `WAITING_HUMAN`.
+- [x] `dryRun` e `autoReply` operantes; endpoint manual `POST /api/ai/conversations/:id/run`.
+- [ ] Mais tools sobre o domínio (propor plantão do pool, criar/atualizar Application,
+      confirmar alocação quando humano libera) — ligar ao Épico 3.
+- [ ] Provedor Anthropic (mesma interface) como alternativa.
+
+**DoD:** com `autoReply=true`, a IA aborda/negocia e em ação crítica faz handoff;
+`AiConversationRun` reflete a execução. ✅ validado (run manual + inbound→handoff).
+
+> **Status (2026-06-28):** motor entregue (OpenAI). Tools básicas + handoff OK;
+> envio real depende de `AI_DRY_RUN=false`.
 
 ---
 
