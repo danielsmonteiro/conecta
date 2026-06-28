@@ -66,3 +66,48 @@ Login, Dashboard (dados reais), Vagas (lista + nova + detalhe com matching/finan
 Profissionais, Organizações, Contratos. Os demais itens do menu (Candidaturas,
 Matching, Alocações, Escala, Financeiro, Conversas, I.A., Integrações, Auditoria,
 Configurações) têm os endpoints prontos no backend — faltam as telas.
+
+## Memória por usuário (atendimento personalizado por IA)
+
+O bot de WhatsApp mantém uma **memória por profissional** para personalizar o atendimento
+(ex.: *"Vi que você é técnica de enfermagem em Fortaleza e prefere plantões noturnos — tenho
+uma vaga compatível"*).
+
+### Fluxo (a cada mensagem recebida)
+
+1. **Identificação pelo WhatsApp** — `MessagingService.ingestInbound` acha o `HealthProfessional`
+   pelo número (últimos 8 dígitos).
+2. **Criação automática** — se o número não existe, cria um cadastro mínimo
+   (`status=INCOMPLETE`, `origin=SELF_SIGNUP`); o nome usa o *profile name* real do WhatsApp.
+3. **Persistência das mensagens** — toda mensagem (inbound/outbound) é salva em `Message`.
+4. **Carga da memória** — antes de chamar a OpenAI, `AiEngineService.run` carrega a memória e a
+   injeta no *system prompt* (bloco "MEMÓRIA DO PROFISSIONAL").
+5. **Resposta personalizada** — a IA usa a memória para não repetir perguntas e propor vagas compatíveis.
+6. **Atualização da memória** — durante a execução, a IA chama a tool `atualizar_memoria` com
+   **apenas o que o profissional informou** (nunca inventa). O serviço grava só os campos preenchidos.
+7. **Candidatura** — ao demonstrar interesse claro, a IA chama `registrar_candidatura`
+   (cria `Application` PENDING, `origin=AI`).
+
+### Onde os dados ficam
+
+- **`HealthProfessional`** — nome, cidade, estado, especialidade principal (campos do cadastro).
+- **`ProfessionalMemory`** (1:1, nova tabela) — `profession`, `specialtyName`, `availability`,
+  `salaryExpectation`, `vacancyPreferences`, `presentedVacancyIds` (vagas já apresentadas),
+  `summary` (resumo evolutivo).
+- **`Application`** — candidaturas feitas.
+- **`Message`** — histórico das conversas.
+
+### Não inventar (garantia)
+
+A escrita só ocorre via tool `atualizar_memoria`, chamada pelo modelo com o que o usuário
+declarou; o `ProfessionalMemoryService` grava **somente campos preenchidos** (descarta vazios).
+O *system prompt* reforça "NUNCA invente nem deduza".
+
+### Inspeção
+
+`GET /api/memory/:professionalId` retorna o perfil + memória + candidaturas do profissional.
+
+### Migração
+
+O modelo `ProfessionalMemory` é aplicado por `prisma db push` no boot do backend (convenção do
+projeto — sem pasta de migrations). Reiniciar o backend cria a tabela.

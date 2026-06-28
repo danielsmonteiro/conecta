@@ -30,6 +30,7 @@ export interface NormalizedInbound {
   from: string; // telefone do profissional (E.164, sem prefixo de canal)
   to?: string;
   body: string;
+  senderName?: string; // nome de perfil do WhatsApp (dado real), p/ semear o cadastro
   externalMessageId?: string;
   externalEventId?: string;
   raw: unknown;

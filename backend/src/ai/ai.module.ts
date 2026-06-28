@@ -3,6 +3,7 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PaginationDto, paginate } from '../common/dto/pagination.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MessagingModule } from '../messaging/messaging.module';
+import { MemoryModule } from '../memory/memory.module';
 import { AiEngineService } from './ai-engine.service';
 import { OpenAiProvider } from './llm/openai.provider';
 
@@ -69,7 +70,7 @@ export class AiController {
 }
 
 @Module({
-  imports: [forwardRef(() => MessagingModule)],
+  imports: [forwardRef(() => MessagingModule), MemoryModule],
   controllers: [AiController],
   providers: [AiService, AiEngineService, OpenAiProvider],
   exports: [AiEngineService],

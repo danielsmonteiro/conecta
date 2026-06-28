@@ -119,6 +119,7 @@ export class TwilioProvider implements WhatsAppProvider {
       from: normalizePhone(b.From),
       to: normalizePhone(b.To),
       body: String(b.Body),
+      senderName: b.ProfileName ? String(b.ProfileName) : undefined,
       externalMessageId: b.MessageSid ?? b.SmsMessageSid,
       externalEventId: b.MessageSid ?? b.SmsMessageSid,
       raw: b,

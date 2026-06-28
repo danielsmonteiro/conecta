@@ -130,6 +130,7 @@ export class OpenWaProvider implements WhatsAppProvider {
       from: normalizePhone(from),
       to: normalizePhone(p.recipient ?? p.to),
       body: String(body),
+      senderName: p.notifyName ?? p.pushName ?? p.senderName ?? p.contact?.pushName ?? undefined,
       externalMessageId: id,
       externalEventId: id,
       raw: b,

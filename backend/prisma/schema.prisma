@@ -314,6 +314,7 @@ model HealthProfessional {
   attendanceRate           Decimal?            @db.Decimal(5, 2)
   notes                    String?
   metrics                  ProfessionalMetrics?
+  memory                   ProfessionalMemory?
   applications             Application[]
   allocations              Allocation[]
   conversations            Conversation[]
@@ -334,6 +335,25 @@ model ProfessionalMetrics {
   completedAllocationsCount  Int                @default(0)
   cancellationsCount         Int                @default(0)
   lateCancellationsCount     Int                @default(0)
+}
+
+// Memória/perfil conversacional do profissional (personalização do atendimento por IA).
+// Campos preenchidos APENAS com o que o profissional informa na conversa (nunca inventar).
+// Nome/cidade/estado/especialidade ficam no próprio HealthProfessional; aqui ficam os
+// dados conversacionais que não existem no cadastro.
+model ProfessionalMemory {
+  id                  String             @id @default(cuid())
+  professionalId      String             @unique
+  professional        HealthProfessional @relation(fields: [professionalId], references: [id], onDelete: Cascade)
+  profession          String?            // profissão informada (texto livre, ex.: "técnica de enfermagem")
+  specialtyName       String?            // especialidade informada (texto livre)
+  availability        String?            // disponibilidade (ex.: "plantões noturnos, fins de semana")
+  salaryExpectation   String?            // pretensão salarial (texto livre, sem forçar moeda/número)
+  vacancyPreferences  String?            // preferências de vaga (texto livre)
+  presentedVacancyIds String[]           @default([]) // vagas já apresentadas a este profissional
+  summary             String?            // resumo evolutivo da conversa
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 }
 
 // ------------------------------ Contratos -------------------------------- 

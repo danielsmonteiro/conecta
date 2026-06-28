@@ -237,23 +237,37 @@ export class MessagingService implements OnModuleInit {
   }
 
   private async ingestInbound(inbound: NormalizedInbound) {
-    const professional = await this.prisma.healthProfessional.findFirst({
+    // 1) Identifica o profissional pelo número do WhatsApp.
+    let professional = await this.prisma.healthProfessional.findFirst({
       where: { whatsapp: { contains: inbound.from.replace(/^\+/, '').slice(-8) } },
     });
 
-    // Só reaproveita conversa aberta se o número casou com um profissional;
-    // número desconhecido sempre abre conversa nova (evita anexar a uma alheia).
-    let conversation = professional
-      ? await this.prisma.conversation.findFirst({
-          where: { professionalId: professional.id, status: { in: ['OPEN', 'AI_ACTIVE', 'WAITING_HUMAN'] } },
-          orderBy: { lastMessageAt: 'desc' },
-        })
-      : null;
+    // 2) Não existe → cria um cadastro mínimo (lead via WhatsApp). O nome usa o
+    // perfil real do WhatsApp quando disponível; o resto a IA completa via memória.
+    if (!professional) {
+      professional = await this.prisma.healthProfessional.create({
+        data: {
+          fullName: inbound.senderName?.trim() || `Contato ${inbound.from.slice(-4)}`,
+          whatsapp: inbound.from,
+          professionalType: 'OTHER',
+          status: 'INCOMPLETE',
+          origin: 'SELF_SIGNUP',
+          metrics: { create: {} },
+        },
+      });
+      this.logger.log(`Novo profissional criado via WhatsApp inbound: ${professional.id}`);
+    }
+
+    // Reaproveita a conversa aberta do profissional, se houver.
+    let conversation = await this.prisma.conversation.findFirst({
+      where: { professionalId: professional.id, status: { in: ['OPEN', 'AI_ACTIVE', 'WAITING_HUMAN'] } },
+      orderBy: { lastMessageAt: 'desc' },
+    });
 
     if (!conversation) {
       conversation = await this.prisma.conversation.create({
         data: {
-          professionalId: professional?.id,
+          professionalId: professional.id,
           channel: 'WHATSAPP',
           status: 'OPEN',
           subject: 'Recebida via WhatsApp',

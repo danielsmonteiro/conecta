@@ -1,6 +1,7 @@
-import { Inject, Injectable, Logger, forwardRef } from '@nestjs/common';
+import { Inject, Injectable, Logger, NotFoundException, ServiceUnavailableException, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MessagingService } from '../messaging/messaging.service';
+import { ProfessionalMemoryService } from '../memory/professional-memory.service';
 import { OpenAiProvider } from './llm/openai.provider';
 import { LlmProvider, LlmTurn, ToolCall, ToolDef } from './llm/llm-provider.interface';
 
@@ -18,6 +19,7 @@ export class AiEngineService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly openai: OpenAiProvider,
+    private readonly memory: ProfessionalMemoryService,
     @Inject(forwardRef(() => MessagingService)) private readonly messaging: MessagingService,
   ) {}
 
@@ -55,13 +57,22 @@ export class AiEngineService {
     const conv = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
       include: {
-        professional: true,
+        professional: { include: { mainSpecialty: true } },
         vacancy: { include: { specialty: true, healthUnit: true } },
         messages: { orderBy: { createdAt: 'desc' }, take: cfg.maxContext },
       },
     });
-    if (!conv) throw new Error('Conversa não encontrada.');
-    if (!llm.isConfigured()) throw new Error(`Provedor de IA (${cfg.provider}) não configurado.`);
+    if (!conv) throw new NotFoundException('Conversa não encontrada.');
+
+    // Memória do profissional → personalização (#5). Cria a linha se faltar.
+    let memBlock = '';
+    if (conv.professionalId) {
+      const [mem, appsCount] = await Promise.all([
+        this.memory.getOrCreate(conv.professionalId),
+        this.prisma.application.count({ where: { professionalId: conv.professionalId } }),
+      ]);
+      memBlock = this.memory.buildPromptBlock(conv.professional, mem, appsCount);
+    }
 
     const history = [...conv.messages].reverse();
     const turns: LlmTurn[] = history.map((m) => ({
@@ -76,8 +87,13 @@ export class AiEngineService {
     const ctx = { conv, handedOff: false };
 
     try {
+      // Gate de configuração DENTRO do try: vira 503 (não 500 cru) e fica registrado
+      // como AiConversationRun FAILED (observabilidade), em vez de sumir silenciosamente.
+      if (!llm.isConfigured()) {
+        throw new ServiceUnavailableException(`Provedor de IA (${cfg.provider}) não configurado.`);
+      }
       for (let i = 0; i < MAX_TOOL_ITERATIONS; i++) {
-        const resp = await llm.chat({ system: this.systemPrompt(conv), messages: turns, tools: this.tools(), model });
+        const resp = await llm.chat({ system: this.systemPrompt(conv, memBlock), messages: turns, tools: this.tools(), model });
         totalTokens += resp.totalTokens;
         if (resp.toolCalls.length) {
           toolCallsCount += resp.toolCalls.length;
@@ -140,6 +156,36 @@ export class AiEngineService {
         parameters: { type: 'object', properties: {} },
       },
       {
+        name: 'atualizar_memoria',
+        description:
+          'Salva no perfil/memória do profissional SOMENTE dados que ele informou explicitamente nesta conversa. ' +
+          'NUNCA invente nem deduza. Chame sempre que ele revelar algo novo (nome, cidade, profissão, especialidade, ' +
+          'disponibilidade, pretensão salarial, preferências de vaga) e para manter o resumo atualizado.',
+        parameters: {
+          type: 'object',
+          properties: {
+            nome: { type: 'string' },
+            cidade: { type: 'string' },
+            estado: {
+              type: 'string',
+              description: 'UF (sigla). Preencha SOMENTE se o profissional disser a UF explicitamente; NUNCA deduza a partir da cidade.',
+            },
+            profissao: { type: 'string', description: 'ex.: técnica de enfermagem' },
+            especialidade: { type: 'string' },
+            disponibilidade: { type: 'string', description: 'ex.: plantões noturnos, fins de semana' },
+            pretensaoSalarial: { type: 'string' },
+            preferenciasVaga: { type: 'string' },
+            resumo: { type: 'string', description: 'Resumo curto e atualizado da conversa.' },
+          },
+        },
+      },
+      {
+        name: 'registrar_candidatura',
+        description:
+          'Registra a candidatura do profissional à vaga vinculada à conversa quando ele demonstrar interesse claro na vaga.',
+        parameters: { type: 'object', properties: {} },
+      },
+      {
         name: 'registrar_resposta',
         description:
           'Registra a intenção do profissional sobre o plantão. Use quando ele aceitar, recusar ou ficar indeciso.',
@@ -172,6 +218,10 @@ export class AiEngineService {
         case 'consultar_vaga': {
           const v = conv.vacancy;
           if (!v) return { content: 'Nenhuma vaga vinculada a esta conversa.', isAction: false };
+          // Marca como apresentada (registro de "vagas já apresentadas").
+          if (conv.professionalId) {
+            await this.memory.markVacancyPresented(conv.professionalId, v.id).catch(() => undefined);
+          }
           return {
             content: JSON.stringify({
               titulo: v.title,
@@ -183,6 +233,26 @@ export class AiEngineService {
             }),
             isAction: false,
           };
+        }
+        case 'atualizar_memoria': {
+          if (!conv.professionalId) return { content: 'Sem profissional vinculado.', isAction: false };
+          const changed = await this.memory.applyUpdate(conv.professionalId, tc.arguments ?? {});
+          return changed.length
+            ? { content: `Memória atualizada: ${changed.join(', ')}.`, isAction: true }
+            : { content: 'Nada novo para salvar.', isAction: false };
+        }
+        case 'registrar_candidatura': {
+          const v = conv.vacancy;
+          if (!v) return { content: 'Nenhuma vaga vinculada para candidatar.', isAction: false };
+          if (!conv.professionalId) return { content: 'Sem profissional vinculado.', isAction: false };
+          const exists = await this.prisma.application.findFirst({
+            where: { vacancyId: v.id, professionalId: conv.professionalId },
+          });
+          if (exists) return { content: 'Candidatura já registrada anteriormente.', isAction: false };
+          await this.prisma.application.create({
+            data: { vacancyId: v.id, professionalId: conv.professionalId, origin: 'AI', status: 'PENDING' },
+          });
+          return { content: 'Candidatura registrada.', isAction: true };
         }
         case 'registrar_resposta': {
           const intencao = tc.arguments?.intencao ?? 'indeciso';
@@ -219,17 +289,22 @@ export class AiEngineService {
     });
   }
 
-  private systemPrompt(conv: any): string {
+  private systemPrompt(conv: any, memBlock = ''): string {
     const nome = conv.professional?.fullName ?? 'profissional';
-    return [
+    const base = [
       'Você é o assistente de contingência do HealthMatch falando por WhatsApp com um profissional de saúde.',
       'Objetivo: cobrir um plantão em aberto (gap). Seja cordial, MUITO conciso (mensagens curtas de WhatsApp), em português do Brasil.',
       `Você está falando com: ${nome}.`,
-      'Use a ferramenta consultar_vaga para saber os detalhes antes de propor.',
-      'Quando o profissional decidir, use registrar_resposta. Nunca confirme a cobertura sozinho: ações críticas vão para um humano.',
+      'Personalize a conversa pela MEMÓRIA abaixo: não pergunte o que já se sabe e referencie o perfil quando fizer sentido.',
+      'Use consultar_vaga para saber os detalhes antes de propor.',
+      'Sempre que o profissional informar algo sobre si (nome, cidade, profissão, especialidade, disponibilidade, pretensão salarial, preferências), chame atualizar_memoria — SOMENTE com o que ele realmente disse, NUNCA invente nem deduza. Ex.: se ele disser apenas a cidade, NÃO preencha o estado/UF.',
+      'Se ele demonstrar interesse claro na vaga, chame registrar_candidatura.',
+      'Quando o profissional decidir sobre o plantão, use registrar_resposta. Nunca confirme a cobertura sozinho: ações críticas vão para um humano.',
       'Se fugir do escopo (pagamento, reclamação, jurídico), use transferir_para_humano.',
       'Não invente dados que não tem; consulte as ferramentas.',
+      'NUNCA mencione ao profissional que você atualizou memória, salvou dados ou usou ferramentas — fale de forma natural.',
     ].join(' ');
+    return memBlock ? `${base}\n\n${memBlock}` : base;
   }
 
   private async recordRun(conversationId: string, data: any) {
