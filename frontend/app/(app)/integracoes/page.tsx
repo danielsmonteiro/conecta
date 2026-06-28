@@ -1,7 +1,9 @@
 'use client';
 
+import { useState } from 'react';
 import { Column, DataTable } from '@/components/DataTable';
 import { PageHeader, Panel, StatCard, StatusBadge } from '@/components/ui';
+import { api } from '@/lib/api';
 import { Paged, useApi } from '@/lib/useApi';
 
 interface Status {
@@ -67,6 +69,24 @@ export default function IntegracoesPage() {
   const outbound = useApi<Paged<Outbound>>('/integrations/outbound-message-logs?limit=10');
   const adapters = useApi<Adapter[]>('/integrations/messaging/adapters');
   const s = status.data;
+
+  const [busy, setBusy] = useState<string | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  async function onSwitch(key: string) {
+    if (key === 'openwa' && !window.confirm('OpenWA é não-oficial (risco de ban do número). Definir como canal ativo?')) return;
+    setBusy(key);
+    setErr(null);
+    try {
+      await api.post('/integrations/messaging/active', { provider: key });
+      adapters.reload();
+      status.reload();
+    } catch (e: any) {
+      setErr(e?.message ?? 'Falha ao alternar o canal.');
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <PageHeader title="Integrações" subtitle="Provedor de mensageria e logs de envio." />
@@ -79,7 +99,30 @@ export default function IntegracoesPage() {
         </div>
       )}
       <Panel title="Canais de WhatsApp">
-        <p className="mb-3 text-sm text-hm-text-muted">Twilio (oficial) é o padrão recomendado para o piloto; OpenWA é não-oficial.</p>
+        <p className="mb-3 text-sm text-hm-text-muted">
+          Twilio (oficial) é o padrão recomendado para o piloto; OpenWA é não-oficial.
+          Clique para definir o <strong>canal ativo</strong> de envio.
+        </p>
+        <div className="mb-4 flex flex-wrap gap-2">
+          {(adapters.data ?? []).map((a) => {
+            const label = a.key === 'twilio' ? 'Twilio (oficial)' : a.key === 'openwa' ? 'OpenWA (não-oficial)' : a.key;
+            return (
+              <button
+                key={a.key}
+                disabled={busy !== null || a.isDefault}
+                onClick={() => onSwitch(a.key)}
+                className={`rounded-hm-sm px-3 py-1.5 text-sm font-medium transition ${
+                  a.isDefault ? 'bg-hm-primary-soft text-hm-primary' : 'text-hm-text-muted hover:bg-hm-surface-muted'
+                } ${busy === a.key ? 'opacity-60' : ''}`}
+              >
+                {a.isDefault ? '● ' : ''}
+                {label}
+                {!a.configured ? ' — não configurado' : ''}
+              </button>
+            );
+          })}
+        </div>
+        {err && <p className="mb-3 text-sm text-hm-danger">{err}</p>}
         <DataTable columns={adapterCols} rows={adapters.data ?? null} loading={adapters.loading} error={adapters.error} empty="Nenhum canal." />
       </Panel>
       <Panel title="Provedores">

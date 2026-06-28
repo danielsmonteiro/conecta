@@ -1,7 +1,12 @@
 import { Body, Controller, Get, Headers, Param, Post, Req, UseGuards } from '@nestjs/common';
+import { IsIn } from 'class-validator';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { MessagingService } from './messaging.service';
+
+class SetActiveProviderDto {
+  @IsIn(['twilio', 'openwa']) provider: 'twilio' | 'openwa';
+}
 
 // Webhooks são PÚBLICOS (o provedor chama sem JWT) — a autenticidade é
 // garantida pela validação de assinatura/secret dentro de cada adapter.
@@ -29,10 +34,16 @@ export class WebhooksController {
 export class MessagingAdminController {
   constructor(private readonly messaging: MessagingService) {}
 
-  // Lista os adapters disponíveis (oficial/não-oficial, configurado, padrão).
+  // Lista os adapters disponíveis (oficial/não-oficial, configurado, ativo).
   @Get('adapters')
   adapters() {
     return this.messaging.describeProviders();
+  }
+
+  // Flag: define o provedor ativo (twilio | openwa). Persistido.
+  @Post('active')
+  setActive(@Body() dto: SetActiveProviderDto) {
+    return this.messaging.setActiveProvider(dto.provider);
   }
 
   @Post('test-send')

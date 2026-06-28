@@ -1,4 +1,5 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { ProviderType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { TwilioProvider } from './providers/twilio.provider';
 import { OpenWaProvider } from './providers/openwa.provider';
@@ -6,6 +7,9 @@ import { NormalizedInbound, WebhookRequest, WhatsAppProvider } from './whatsapp-
 
 const DRAIN_INTERVAL_MS = Number(process.env.MESSAGING_DRAIN_INTERVAL_MS ?? 10_000);
 const MAX_BATCH = 20;
+
+// Mapeia a chave do adapter para o enum ProviderType (persistência).
+const TYPE_BY_KEY: Record<string, ProviderType> = { twilio: 'TWILIO', openwa: 'CUSTOM' };
 
 @Injectable()
 export class MessagingService implements OnModuleInit {
@@ -23,18 +27,33 @@ export class MessagingService implements OnModuleInit {
     this.providers.set(openwa.key, openwa);
   }
 
-  // Drain em memória (single-instance). Substituir por BullMQ/@nestjs/schedule
-  // quando houver volume/múltiplas instâncias (Épico 3/7 do ROADMAP_TECNICO.md).
-  onModuleInit() {
+  async onModuleInit() {
+    await this.ensureProviderRows().catch((e) => this.logger.error(`ensureProviderRows: ${e}`));
+    // Drain em memória (single-instance). Substituir por BullMQ/@nestjs/schedule
+    // quando houver volume/múltiplas instâncias (Épico 3/7 do ROADMAP_TECNICO.md).
     if (process.env.MESSAGING_DRAIN_ENABLED === 'false') return;
     this.timer = setInterval(() => this.drainQueue().catch((e) => this.logger.error(e)), DRAIN_INTERVAL_MS);
     if (this.timer.unref) this.timer.unref();
   }
 
-  getProvider(key?: string): WhatsAppProvider {
-    const selected = key ?? process.env.MESSAGING_PROVIDER ?? 'twilio';
-    const provider = this.providers.get(selected);
-    if (!provider) throw new Error(`Provedor de WhatsApp desconhecido: ${selected}`);
+  // Garante uma linha MessagingProvider por adapter; default inicial = env (ou twilio).
+  private async ensureProviderRows() {
+    const envDefault = process.env.MESSAGING_PROVIDER ?? 'twilio';
+    for (const p of this.listProviders()) {
+      const existing = await this.prisma.messagingProvider.findFirst({ where: { name: p.key } });
+      if (!existing) {
+        await this.prisma.messagingProvider.create({
+          data: { name: p.key, type: TYPE_BY_KEY[p.key] ?? 'CUSTOM', isDefault: p.key === envDefault },
+        });
+      }
+    }
+    const anyDefault = await this.prisma.messagingProvider.findFirst({ where: { isDefault: true } });
+    if (!anyDefault) await this.setActiveProvider(this.providers.has(envDefault) ? envDefault : 'twilio');
+  }
+
+  private byKey(key: string): WhatsAppProvider {
+    const provider = this.providers.get(key);
+    if (!provider) throw new BadRequestException(`Provedor de WhatsApp desconhecido: ${key}`);
     return provider;
   }
 
@@ -42,14 +61,39 @@ export class MessagingService implements OnModuleInit {
     return [...this.providers.values()];
   }
 
-  /** Descritor dos adapters para a UI (fonte única de verdade do registro). */
-  describeProviders() {
-    const def = process.env.MESSAGING_PROVIDER ?? 'twilio';
+  /** Chave do provedor ativo: override explícito → flag persistida (DB) → env → twilio. */
+  async activeProviderKey(explicit?: string): Promise<string> {
+    if (explicit && this.providers.has(explicit)) return explicit;
+    const row = await this.prisma.messagingProvider.findFirst({ where: { isDefault: true } });
+    const key = row?.name ?? process.env.MESSAGING_PROVIDER ?? 'twilio';
+    return this.providers.has(key) ? key : 'twilio';
+  }
+
+  /** Troca a flag: define qual provedor é o ativo (persistido). */
+  async setActiveProvider(key: string) {
+    this.byKey(key); // valida
+    await this.ensureRow(key);
+    await this.prisma.messagingProvider.updateMany({ data: { isDefault: false } });
+    await this.prisma.messagingProvider.updateMany({ where: { name: key }, data: { isDefault: true } });
+    this.logger.log(`Provedor de WhatsApp ativo: ${key}`);
+    return this.describeProviders();
+  }
+
+  private async ensureRow(key: string) {
+    const existing = await this.prisma.messagingProvider.findFirst({ where: { name: key } });
+    if (!existing) {
+      await this.prisma.messagingProvider.create({ data: { name: key, type: TYPE_BY_KEY[key] ?? 'CUSTOM' } });
+    }
+  }
+
+  /** Descritor dos adapters para a UI (flag ativa vem do DB). */
+  async describeProviders() {
+    const active = await this.activeProviderKey();
     return this.listProviders().map((p) => ({
       key: p.key,
       official: p.official,
       configured: p.isConfigured(),
-      isDefault: p.key === def,
+      isDefault: p.key === active,
     }));
   }
 
@@ -64,31 +108,26 @@ export class MessagingService implements OnModuleInit {
     });
     if (!conv) throw new Error('Conversa não encontrada.');
     const to = conv.professional?.whatsapp ?? '';
+    const providerKey = await this.activeProviderKey(opts.providerKey);
 
     const [message, log] = await this.prisma.$transaction([
       this.prisma.message.create({
         data: { conversationId, direction: 'OUTBOUND', body, status: 'QUEUED', sentByAi: !!opts.sentByAi },
       }),
       this.prisma.outboundMessageLog.create({
-        data: {
-          conversationId,
-          provider: opts.providerKey ?? process.env.MESSAGING_PROVIDER ?? 'twilio',
-          to: to || 'unknown',
-          body,
-          status: 'QUEUED',
-        },
+        data: { conversationId, provider: providerKey, to: to || 'unknown', body, status: 'QUEUED' },
       }),
       this.prisma.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: new Date(), lastMessagePreview: body.slice(0, 140) } }),
     ]);
 
     // Tentativa imediata (best-effort); se falhar/ficar QUEUED, o drain reprocessa.
-    await this.dispatch(log.id, message.id, to, body, opts.providerKey).catch((e) => this.logger.error(e));
+    await this.dispatch(log.id, message.id, to, body, providerKey).catch((e) => this.logger.error(e));
     return message;
   }
 
   /** Envia um log específico via provedor e propaga o status para a Message. */
-  private async dispatch(logId: string, messageId: string | null, to: string, body: string, providerKey?: string) {
-    const provider = this.getProvider(providerKey);
+  private async dispatch(logId: string, messageId: string | null, to: string, body: string, providerKey: string) {
+    const provider = this.byKey(providerKey);
     if (!to || to === 'unknown') {
       await this.markFailed(logId, messageId, 'NO_RECIPIENT', 'Profissional sem WhatsApp.');
       return;
@@ -98,7 +137,7 @@ export class MessagingService implements OnModuleInit {
       where: { id: logId },
       data: {
         status: result.status,
-        from: process.env.TWILIO_WHATSAPP_FROM ?? null,
+        from: providerKey === 'twilio' ? process.env.TWILIO_WHATSAPP_FROM ?? null : null,
         externalMessageId: result.externalMessageId,
         requestPayload: result.requestPayload as any,
         responsePayload: result.responsePayload as any,
