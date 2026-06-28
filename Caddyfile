@@ -1,23 +1,17 @@
-# Proxy reverso compartilhado: serve PROD e DEV no mesmo Caddy (um só dono de 80/443).
-# Domínios parametrizados (APP_DOMAIN = prod, DEV_DOMAIN = dev). Alvos por nome de
-# container porque o Caddy está anexado às redes dos dois projetos (prod e dev), onde
-# os nomes de serviço 'frontend'/'backend' colidiriam.
+# Proxy reverso do Conecta. O domínio vem 100% de APP_DOMAIN (.env) — trocar o
+# nome = trocar essa env e recriar o caddy; o certificado TLS é reemitido sozinho.
 {
 	email {$ACME_EMAIL}
 }
 
-# ---- Produção ----
 {$APP_DOMAIN} {
 	encode gzip zstd
-	@api path /api/*
-	reverse_proxy @api healthmatch-prod-backend-1:3000
-	reverse_proxy healthmatch-prod-frontend-1:3000
-}
 
-# ---- Desenvolvimento ----
-{$DEV_DOMAIN} {
-	encode gzip zstd
+	# /api/* vai DIRETO ao backend (preserva o prefixo /api). Evita o gotcha de
+	# rewrites do Next em build standalone e é mais eficiente (não passa pelo Next).
 	@api path /api/*
-	reverse_proxy @api healthmatch-dev-backend-1:3000
-	reverse_proxy healthmatch-dev-frontend-1:3000
+	reverse_proxy @api backend:3000
+
+	# Todo o resto é o frontend (Next).
+	reverse_proxy frontend:3000
 }

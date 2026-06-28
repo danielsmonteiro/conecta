@@ -1,7 +1,8 @@
-# HealthMatch — stack de DESENVOLVIMENTO (hot reload).
-#   docker compose up --build
-#   frontend: http://localhost:3001   backend: http://localhost:3000/api
-name: healthmatch-dev
+# Conecta/HealthMatch — ambiente ÚNICO: nomenclatura de produção, estado de
+# desenvolvimento (hot-reload). Servido por HTTPS no domínio (APP_DOMAIN) via Caddy.
+#   docker compose up -d --build
+#   App: https://${APP_DOMAIN}  ·  editar /root/conecta reflete na hora (watch).
+name: healthmatch-prod
 
 services:
   db:
@@ -11,10 +12,11 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-healthmatch}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-healthmatch}
       POSTGRES_DB: ${POSTGRES_DB:-healthmatch}
+    # Exposto só no loopback (acesso local/túnel SSH); não publicar Postgres na internet.
     ports:
-      - '5432:5432'
+      - '127.0.0.1:5432:5432'
     volumes:
-      - devdata:/var/lib/postgresql/data
+      - pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-healthmatch}']
       interval: 5s
@@ -34,14 +36,14 @@ services:
       PORT: '3000'
       # Fuso da aplicação (default Fortaleza, parametrizável). Banco fica em UTC.
       TZ: ${TZ:-America/Fortaleza}
-      # Ambiente DEV servido em https://devhealthmatch.prompthouse.ia.br (via Caddy compartilhado).
-      PUBLIC_BASE_URL: ${DEV_PUBLIC_URL:-https://devhealthmatch.prompthouse.ia.br}
-      CORS_ORIGIN: ${DEV_CORS_ORIGIN:-https://devhealthmatch.prompthouse.ia.br}
+      # Identidade pública (domínio HTTPS via Caddy).
+      PUBLIC_BASE_URL: https://${APP_DOMAIN:?defina APP_DOMAIN no .env}
+      CORS_ORIGIN: https://${APP_DOMAIN}
+      COOKIE_SECURE: 'true'
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret}
       JWT_ACCESS_TTL: '900'
       JWT_REFRESH_TTL: '604800'
-      COOKIE_SECURE: ${DEV_COOKIE_SECURE:-true}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@healthmatch.local}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-changeme123}
       # Twilio (oficial). Segredos via .env (git-ignored).
@@ -50,16 +52,15 @@ services:
       TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-}
       TWILIO_MESSAGING_SERVICE_SID: ${TWILIO_MESSAGING_SERVICE_SID:-}
       TWILIO_DEFAULT_CONTENT_SID: ${TWILIO_DEFAULT_CONTENT_SID:-}
-      TWILIO_VALIDATE_SIGNATURE: ${TWILIO_VALIDATE_SIGNATURE:-false}
-      # OpenWA (app separado, na rede compartilhada openwa-network). Default de
-      # envio segue Twilio; OpenWA é opt-in (MESSAGING_PROVIDER=openwa por conversa/teste).
+      TWILIO_VALIDATE_SIGNATURE: ${TWILIO_VALIDATE_SIGNATURE:-true}
+      # OpenWA (app separado, na rede compartilhada openwa-network). Opt-in por conversa/teste.
       OPENWA_BASE_URL: http://openwa-api:2785
       OPENWA_API_KEY: ${OPENWA_API_KEY:-}
       OPENWA_SESSION: ${OPENWA_SESSION:-default}
       OPENWA_WEBHOOK_SECRET: ${OPENWA_WEBHOOK_SECRET:-}
       OPENWA_VALIDATE_WEBHOOK: ${OPENWA_VALIDATE_WEBHOOK:-true}
-      OPENWA_SIGNATURE_HEADER: ${OPENWA_SIGNATURE_HEADER:-x-webhook-hmac}
-      OPENWA_HMAC_ALGO: ${OPENWA_HMAC_ALGO:-sha512}
+      OPENWA_SIGNATURE_HEADER: ${OPENWA_SIGNATURE_HEADER:-x-openwa-signature}
+      OPENWA_HMAC_ALGO: ${OPENWA_HMAC_ALGO:-sha256}
       # IA (Épico 2). Provedor default = OpenAI; segredos via .env (git-ignored).
       AI_ENABLED: ${AI_ENABLED:-true}
       AI_PROVIDER: ${AI_PROVIDER:-openai}
@@ -70,6 +71,7 @@ services:
       AI_DRY_RUN: ${AI_DRY_RUN:-true}
       AI_REQUIRE_HUMAN: ${AI_REQUIRE_HUMAN:-true}
       AI_MAX_CONTEXT_MESSAGES: ${AI_MAX_CONTEXT_MESSAGES:-20}
+    # Hot-reload: db push + seed idempotente + watch.
     command: >
       sh -c "npx prisma db push --accept-data-loss &&
              (npm run db:seed || true) &&
@@ -77,8 +79,6 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules
-    ports:
-      - '3010:3000'
     networks:
       - default
       - openwa
@@ -97,17 +97,34 @@ services:
       - ./frontend:/app
       - /app/node_modules
       - /app/.next
+
+  # Proxy reverso + TLS (Let's Encrypt automático). Serve o domínio e roteia
+  # /api → backend (preserva prefixo) e o resto → frontend.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - frontend
     ports:
-      - '3011:3000'
+      - '80:80'
+      - '443:443'
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?defina APP_DOMAIN no .env}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
 
 volumes:
-  devdata:
+  pgdata:
+  caddy_data:
+  caddy_config:
 
 networks:
-  # Rede do app (db, backend, frontend).
+  # Rede do app (db, backend, frontend, caddy).
   default:
   # Rede compartilhada com o app OpenWA (criada pelo compose do OpenWA).
-  # Permite backend → http://openwa-api:2785 e OpenWA → http://backend:3000.
   openwa:
     external: true
     name: openwa-network
