@@ -4,7 +4,7 @@
 #   (para prod: troque o primeiro -f por docker-compose.prod.yml)
 #
 # O nome de domínio é parametrizado por APP_DOMAIN no .env. Tudo deriva dele.
-name: healthmatch-dev
+# Sem 'name' fixo: herda o projeto do compose base (dev ou prod).
 
 services:
   caddy:

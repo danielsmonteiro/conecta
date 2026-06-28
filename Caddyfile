@@ -6,7 +6,12 @@
 
 {$APP_DOMAIN} {
 	encode gzip zstd
-	# HTTPS automático (Let's Encrypt). Encaminha tudo ao frontend (Next), que por
-	# sua vez faz proxy same-origin de /api para o backend.
+
+	# /api/* vai DIRETO ao backend (preserva o prefixo /api). Evita o gotcha de
+	# rewrites do Next em build standalone e é mais eficiente (não passa pelo Next).
+	@api path /api/*
+	reverse_proxy @api backend:3000
+
+	# Todo o resto é o frontend (Next).
 	reverse_proxy frontend:3000
 }
