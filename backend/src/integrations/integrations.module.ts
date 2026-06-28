@@ -13,16 +13,21 @@ export class IntegrationsService {
     const hasAccountSid = !!e.TWILIO_ACCOUNT_SID;
     const hasAuthToken = !!e.TWILIO_AUTH_TOKEN;
     const hasPhoneNumber = !!e.TWILIO_PHONE_NUMBER;
+    const hasWhatsappFrom = !!e.TWILIO_WHATSAPP_FROM;
+    const hasMessagingService = !!e.TWILIO_MESSAGING_SERVICE_SID;
     return {
       provider: e.MESSAGING_PROVIDER ?? 'twilio',
       hasAccountSid,
       hasAuthToken,
       hasPhoneNumber,
-      hasWhatsappFrom: !!e.TWILIO_WHATSAPP_FROM,
+      hasWhatsappFrom,
       hasTestWhatsappTo: !!e.TWILIO_TEST_WHATSAPP_TO,
       validateSignatureEnabled: e.TWILIO_VALIDATE_SIGNATURE !== 'false',
-      isConfigured: hasAccountSid && hasAuthToken && hasPhoneNumber,
-      twilioMessagingServiceConfigured: !!e.TWILIO_MESSAGING_SERVICE_SID,
+      // Pronto p/ WhatsApp = credenciais + um remetente (número WhatsApp OU
+      // Messaging Service). Espelha TwilioProvider.isConfigured(); TWILIO_PHONE_NUMBER
+      // é só p/ SMS e não deve bloquear o canal WhatsApp.
+      isConfigured: hasAccountSid && hasAuthToken && (hasWhatsappFrom || hasMessagingService),
+      twilioMessagingServiceConfigured: hasMessagingService,
     };
   }
 

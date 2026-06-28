@@ -110,8 +110,10 @@ export class TwilioProvider implements WhatsAppProvider {
 
   parseInbound(req: WebhookRequest): NormalizedInbound | null {
     const b = req.body;
-    // Status callbacks têm MessageStatus mas não Body → não são inbound.
-    if (b.MessageStatus || b.SmsStatus) return null;
+    // Callbacks de status de entrega trazem MessageStatus (sent/delivered/...) e sem Body.
+    // ATENÇÃO: mensagens inbound de WhatsApp do Twilio trazem SmsStatus='received' — NÃO
+    // descartar por SmsStatus, senão toda mensagem real do profissional é perdida.
+    if (b.MessageStatus) return null;
     if (!b.From || b.Body == null) return null;
     return {
       from: normalizePhone(b.From),
