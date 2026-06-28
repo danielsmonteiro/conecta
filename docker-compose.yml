@@ -14,7 +14,7 @@ services:
     ports:
       - '5432:5432'
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - devdata:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-healthmatch}']
       interval: 5s
@@ -34,15 +34,14 @@ services:
       PORT: '3000'
       # Fuso da aplicação (default Fortaleza, parametrizável). Banco fica em UTC.
       TZ: ${TZ:-America/Fortaleza}
-      # O frontend é proxy same-origin (/api), então CORS normalmente nem entra em
-      # jogo. Mantemos origens da LAN liberadas caso o backend (:3000) seja chamado
-      # direto do browser de outra máquina. Ajuste CORS_ORIGIN no .env para seu IP.
-      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3001,http://192.168.1.147:3001,http://192.168.1.208:3001}
+      # Ambiente DEV servido em https://devhealthmatch.prompthouse.ia.br (via Caddy compartilhado).
+      PUBLIC_BASE_URL: ${DEV_PUBLIC_URL:-https://devhealthmatch.prompthouse.ia.br}
+      CORS_ORIGIN: ${DEV_CORS_ORIGIN:-https://devhealthmatch.prompthouse.ia.br}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-dev-access-secret}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-dev-refresh-secret}
       JWT_ACCESS_TTL: '900'
       JWT_REFRESH_TTL: '604800'
-      COOKIE_SECURE: 'false'
+      COOKIE_SECURE: ${DEV_COOKIE_SECURE:-true}
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@healthmatch.local}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-changeme123}
       # Twilio (oficial). Segredos via .env (git-ignored).
@@ -79,7 +78,7 @@ services:
       - ./backend:/app
       - /app/node_modules
     ports:
-      - '3000:3000'
+      - '3010:3000'
     networks:
       - default
       - openwa
@@ -99,10 +98,10 @@ services:
       - /app/node_modules
       - /app/.next
     ports:
-      - '3001:3000'
+      - '3011:3000'
 
 volumes:
-  pgdata:
+  devdata:
 
 networks:
   # Rede do app (db, backend, frontend).

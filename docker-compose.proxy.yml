@@ -17,11 +17,15 @@ services:
       - '443:443'
     environment:
       APP_DOMAIN: ${APP_DOMAIN:?defina APP_DOMAIN no .env}
+      DEV_DOMAIN: ${DEV_DOMAIN:-devhealthmatch.prompthouse.ia.br}
       ACME_EMAIL: ${ACME_EMAIL:-}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
+    networks:
+      - default
+      - devnet
 
   # Injeta a identidade pública derivada de APP_DOMAIN (merge com o compose base).
   backend:
@@ -33,3 +37,10 @@ services:
 volumes:
   caddy_data:
   caddy_config:
+
+networks:
+  default:
+  # Rede do projeto de dev (healthmatch-dev) — para o Caddy alcançar os containers de dev.
+  devnet:
+    external: true
+    name: healthmatch-dev_default
