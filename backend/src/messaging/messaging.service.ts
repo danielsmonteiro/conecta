@@ -206,6 +206,16 @@ export class MessagingService implements OnModuleInit {
     const inbound = valid ? provider.parseInbound(req) : null;
     const status = valid ? provider.parseStatus(req) : null;
 
+    // Dedup de INBOUND por externalEventId (provedores reentregam o webhook).
+    // Status callbacks NÃO são deduplicados (sent→delivered→read reusam o SID).
+    let duplicate = false;
+    if (valid && inbound?.externalEventId) {
+      const prior = await this.prisma.webhookLog.count({
+        where: { provider: providerKey, eventType: 'message', externalEventId: inbound.externalEventId, processed: true },
+      });
+      duplicate = prior > 0;
+    }
+
     await this.prisma.webhookLog.create({
       data: {
         provider: providerKey,
@@ -213,13 +223,14 @@ export class MessagingService implements OnModuleInit {
         externalEventId: inbound?.externalEventId ?? status?.externalMessageId,
         payload: req.body as any,
         headers: this.safeHeaders(req.headers) as any,
-        processed: valid && !!(inbound || status),
+        processed: valid && !!(inbound || status) && !duplicate,
         processedAt: new Date(),
-        error: valid ? null : 'invalid_signature',
+        error: !valid ? 'invalid_signature' : duplicate ? 'duplicate' : null,
       },
     });
 
     if (!valid) return { ok: false, reason: 'invalid_signature' };
+    if (duplicate) return { ok: true, deduped: true };
     if (inbound) await this.ingestInbound(inbound);
     if (status) await this.applyStatus(status);
     return { ok: true };
@@ -259,9 +270,11 @@ export class MessagingService implements OnModuleInit {
         data: { lastMessageAt: new Date(), lastMessagePreview: inbound.body.slice(0, 140) },
       }),
     ]);
-    // Épico 2: aciona o motor de IA se a conversa tiver IA habilitada (a própria
-    // checagem de aiEnabled/autoReply/status fica no engine; nunca lança aqui).
-    await this.aiEngine.onInbound(conversation.id).catch((e) => this.logger.error(`IA onInbound: ${e?.message}`));
+    // Épico 2: dispara o motor de IA em BACKGROUND (promise solta) — NÃO bloqueia
+    // a resposta do webhook, evitando timeout/reentrega do provedor (Twilio dá
+    // timeout ~10-15s). A checagem de aiEnabled/autoReply fica no engine.
+    // Single-instance: migrar para fila durável (BullMQ) ao escalar.
+    void this.aiEngine.onInbound(conversation.id).catch((e) => this.logger.error(`IA onInbound: ${e?.message}`));
   }
 
   private async applyStatus(status: { externalMessageId: string; status: any }) {

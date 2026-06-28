@@ -4,7 +4,9 @@ import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  // rawBody: true expõe req.rawBody (Buffer) p/ validação HMAC de webhooks
+  // (OpenWA) sem perder o parsing normal de JSON/urlencoded.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   app.use(cookieParser());
   app.setGlobalPrefix('api'); // todas as rotas sob /api (como na produção)

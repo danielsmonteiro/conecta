@@ -115,9 +115,14 @@ No Mac, dê um **hard refresh** (Cmd+Shift+R) para descartar a página em branco
 - ✅ adapter `openwa` reporta `configured: true`.
 - ⏳ Envio/recebimento real depende do **QR** (passo manual acima).
 
-## Pendência técnica (hardening)
+## Validação HMAC do webhook (implementada)
 
-O webhook do OpenWA usa **assinatura HMAC**; o adapter hoje valida por segredo simples
-e por isso o bring-up roda com `OPENWA_VALIDATE_WEBHOOK=false`. Alinhar o esquema HMAC
-exato do OpenWA (com `rawBody`) é follow-up antes de produção. O Twilio já valida
-assinatura (HMAC-SHA1) corretamente.
+O adapter valida o webhook por **HMAC sobre o corpo cru** (`rawBody`), com header e
+algoritmo configuráveis:
+- `OPENWA_WEBHOOK_SECRET` — segredo compartilhado (se vazio, cai em `OPENWA_VALIDATE_WEBHOOK`).
+- `OPENWA_SIGNATURE_HEADER` (default `x-webhook-hmac`) e `OPENWA_HMAC_ALGO` (default `sha512`).
+- Aceita hex ou base64 e prefixo `algo=` (estilo GitHub); comparação timing-safe.
+
+⚠️ **Confirme o esquema exato** (nome do header e algoritmo) na sua instância do OpenWA e
+ajuste as duas envs — o default segue o padrão WAHA, mas pode variar por versão.
+O Twilio valida assinatura HMAC-SHA1 (precisa de `PUBLIC_BASE_URL` correto).

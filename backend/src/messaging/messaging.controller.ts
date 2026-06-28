@@ -19,12 +19,13 @@ export class WebhooksController {
     @Param('provider') provider: string,
     @Body() body: Record<string, any>,
     @Headers() headers: Record<string, any>,
-    @Req() req: Request,
+    @Req() req: Request & { rawBody?: Buffer },
   ) {
     const url = process.env.PUBLIC_BASE_URL
       ? `${process.env.PUBLIC_BASE_URL.replace(/\/$/, '')}${req.originalUrl}`
       : `${req.protocol}://${req.get('host')}${req.originalUrl}`;
-    return this.messaging.handleWebhook(provider, { body: body ?? {}, headers, url });
+    const rawBody = req.rawBody ? req.rawBody.toString('utf8') : undefined;
+    return this.messaging.handleWebhook(provider, { body: body ?? {}, headers, url, rawBody });
   }
 }
 

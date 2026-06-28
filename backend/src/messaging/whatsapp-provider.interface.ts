@@ -47,6 +47,7 @@ export interface WebhookRequest {
   body: Record<string, any>;
   headers: Record<string, any>;
   url: string; // URL pública completa que o provedor chamou (p/ validar assinatura)
+  rawBody?: string; // corpo cru (bytes) p/ validação HMAC (OpenWA)
 }
 
 export interface WhatsAppProvider {

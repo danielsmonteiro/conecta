@@ -11,6 +11,7 @@
 // defensivo abaixo cobre os formatos mais comuns.
 
 import { Injectable, Logger } from '@nestjs/common';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import {
   DeliveryUpdate,
   NormalizedInbound,
@@ -85,12 +86,32 @@ export class OpenWaProvider implements WhatsAppProvider {
     }
   }
 
-  // Sem assinatura HMAC nativa: validamos um token compartilhado no header.
+  // Validação HMAC sobre o corpo cru (rawBody). Header e algoritmo são
+  // configuráveis (OPENWA_SIGNATURE_HEADER / OPENWA_HMAC_ALGO) — confirme o
+  // esquema exato na instância do OpenWA. Aceita hex ou base64 e prefixo
+  // "algo=" (estilo GitHub). Sem segredo: respeita OPENWA_VALIDATE_WEBHOOK.
   validateWebhook(req: WebhookRequest): boolean {
     const secret = process.env.OPENWA_WEBHOOK_SECRET;
     if (!secret) return process.env.OPENWA_VALIDATE_WEBHOOK === 'false';
-    const got = (req.headers['x-webhook-secret'] ?? req.headers['x-api-key']) as string | undefined;
-    return got === secret;
+    if (!req.rawBody) return false;
+    const headerName = (process.env.OPENWA_SIGNATURE_HEADER ?? 'x-webhook-hmac').toLowerCase();
+    let sig = (req.headers[headerName] ?? req.headers['x-hub-signature-256']) as string | undefined;
+    if (!sig) return false;
+    sig = sig.replace(/^(sha1|sha256|sha512)=/i, '').trim();
+    const algo = process.env.OPENWA_HMAC_ALGO ?? 'sha512';
+    let digest: Buffer;
+    try {
+      digest = createHmac(algo, secret).update(Buffer.from(req.rawBody, 'utf8')).digest();
+    } catch {
+      return false;
+    }
+    return this.timingEq(sig, digest.toString('hex')) || this.timingEq(sig, digest.toString('base64'));
+  }
+
+  private timingEq(a: string, b: string): boolean {
+    const ba = Buffer.from(a);
+    const bb = Buffer.from(b);
+    return ba.length === bb.length && timingSafeEqual(ba, bb);
   }
 
   parseInbound(req: WebhookRequest): NormalizedInbound | null {
