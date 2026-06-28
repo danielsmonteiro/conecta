@@ -163,18 +163,21 @@ async function main() {
   }
 
   // -------------------------------------- Candidaturas / Alocações (idempotente)
-  await prisma.application.deleteMany({ where: { vacancyId: { in: vacancies.map((v) => v.id) } } });
-  await prisma.allocation.deleteMany({ where: { vacancyId: { in: vacancies.map((v) => v.id) } } });
-
-  await prisma.application.createMany({
-    data: [
-      { vacancyId: 'vac-clinico-aurora', professionalId: 'pro-ana', status: 'APPROVED', matchScore: 95 },
-      { vacancyId: 'vac-clinico-aurora', professionalId: 'pro-carla', status: 'IN_REVIEW', matchScore: 70 },
-      { vacancyId: 'vac-cardio-upa', professionalId: 'pro-bruno', status: 'PENDING', matchScore: 88 },
-    ],
-  });
-  await prisma.allocation.create({
-    data: {
+  // IDs fixos + upsert: re-rodar o seed NUNCA apaga dados (preserva o que foi
+  // criado em runtime via API/IA/WhatsApp). Sem nenhum deleteMany.
+  const apps: { id: string; vacancyId: string; professionalId: string; status: any; matchScore: number }[] = [
+    { id: 'app-ana-aurora', vacancyId: 'vac-clinico-aurora', professionalId: 'pro-ana', status: 'APPROVED', matchScore: 95 },
+    { id: 'app-carla-aurora', vacancyId: 'vac-clinico-aurora', professionalId: 'pro-carla', status: 'IN_REVIEW', matchScore: 70 },
+    { id: 'app-bruno-cardio', vacancyId: 'vac-cardio-upa', professionalId: 'pro-bruno', status: 'PENDING', matchScore: 88 },
+  ];
+  for (const a of apps) {
+    await prisma.application.upsert({ where: { id: a.id }, update: {}, create: a });
+  }
+  await prisma.allocation.upsert({
+    where: { id: 'alloc-ana-aurora' },
+    update: {},
+    create: {
+      id: 'alloc-ana-aurora',
       vacancyId: 'vac-clinico-aurora',
       professionalId: 'pro-ana',
       status: 'CONFIRMED',
@@ -185,9 +188,11 @@ async function main() {
   await prisma.vacancy.update({ where: { id: 'vac-clinico-aurora' }, data: { filledDoctors: 1 } });
 
   // ---------------------------------------------- Conversas / mensagens / IA
-  await prisma.conversation.deleteMany({});
-  const conv = await prisma.conversation.create({
-    data: {
+  await prisma.conversation.upsert({
+    where: { id: 'conv-ana-aurora' },
+    update: {},
+    create: {
+      id: 'conv-ana-aurora',
       professionalId: 'pro-ana',
       vacancyId: 'vac-clinico-aurora',
       channel: 'WHATSAPP',
@@ -202,56 +207,58 @@ async function main() {
       },
     },
   });
-  await prisma.conversation.create({
-    data: { professionalId: 'pro-bruno', channel: 'WHATSAPP', status: 'WAITING_HUMAN', aiEnabled: false, lastMessageAt: new Date() },
+  await prisma.conversation.upsert({
+    where: { id: 'conv-bruno' },
+    update: {},
+    create: { id: 'conv-bruno', professionalId: 'pro-bruno', channel: 'WHATSAPP', status: 'WAITING_HUMAN', aiEnabled: false, lastMessageAt: new Date() },
   });
-  await prisma.aiConversationRun.create({
-    data: { conversationId: conv.id, status: 'COMPLETED', model: 'claude-haiku-4-5', outcome: 'Profissional respondeu com interesse', tokensUsed: 1450, finishedAt: new Date() },
+  await prisma.aiConversationRun.upsert({
+    where: { id: 'run-ana-1' },
+    update: {},
+    create: { id: 'run-ana-1', conversationId: 'conv-ana-aurora', status: 'COMPLETED', model: 'gpt-4o-mini', outcome: 'Profissional respondeu com interesse', tokensUsed: 1450, finishedAt: new Date() },
   });
 
   // ------------------------------------------------------------ Integrações
-  await prisma.messagingProvider.upsert({
-    where: { id: 'provider-whatsapp-cloud' },
+  // Os provedores ativos (twilio/openwa) são garantidos em runtime pelo
+  // MessagingService (ensureProviderRows); o seed não mexe no provedor padrão.
+  const outLogs: any[] = [
+    { id: 'log-seed-1', conversationId: 'conv-ana-aurora', provider: 'twilio', channel: 'WHATSAPP', to: '(85) 980000000', from: '+5585990000000', contentType: 'text', body: 'Mensagem enviada com sucesso', status: 'DELIVERED', externalMessageId: 'SM123', sentAt: new Date() },
+    { id: 'log-seed-2', provider: 'twilio', channel: 'WHATSAPP', to: '(85) 981111111', body: 'Número inválido', status: 'FAILED', errorCode: '21211', errorMessage: 'invalid_number' },
+  ];
+  for (const l of outLogs) {
+    await prisma.outboundMessageLog.upsert({ where: { id: l.id }, update: {}, create: l });
+  }
+  await prisma.webhookLog.upsert({
+    where: { id: 'wh-seed-1' },
     update: {},
-    create: { id: 'provider-whatsapp-cloud', name: 'WhatsApp Cloud API', type: 'WHATSAPP_CLOUD', status: 'ACTIVE', isDefault: true },
-  });
-  await prisma.outboundMessageLog.deleteMany({});
-  await prisma.outboundMessageLog.createMany({
-    data: [
-      { conversationId: conv.id, provider: 'twilio', channel: 'WHATSAPP', to: '(85) 980000000', from: '+5585990000000', contentType: 'text', body: 'Mensagem enviada com sucesso', status: 'DELIVERED', externalMessageId: 'SM123', sentAt: new Date() },
-      { provider: 'twilio', channel: 'WHATSAPP', to: '(85) 981111111', body: 'Número inválido', status: 'FAILED', errorCode: '21211', errorMessage: 'invalid_number' },
-    ],
-  });
-  await prisma.webhookLog.deleteMany({});
-  await prisma.webhookLog.create({
-    data: { provider: 'twilio', channel: 'WHATSAPP', eventType: 'message.delivered', externalEventId: 'EV123', processed: true, processedAt: new Date() },
+    create: { id: 'wh-seed-1', provider: 'twilio', channel: 'WHATSAPP', eventType: 'message.delivered', externalEventId: 'EV123', processed: true, processedAt: new Date() },
   });
 
   // -------------------------------------------------------------- Financeiro
-  await prisma.financialEntry.deleteMany({});
   const due = (d: string) => new Date(d);
-  await prisma.financialEntry.createMany({
-    data: [
-      { type: 'CLIENT_RECEIVABLE', direction: 'IN', status: 'PENDING_APPROVAL', amount: 1800, currency: 'BRL', dueDate: due('2026-07-31'), competenceDate: due('2026-07-01'), vacancyId: 'vac-clinico-aurora', organizationId: 'organization-saude-nordeste', contractId: 'contract-plantao-aurora', description: 'Plantão clínico - recebível cliente' },
-      { type: 'PROFESSIONAL_PAYABLE', direction: 'OUT', status: 'PENDING_APPROVAL', amount: 1200, currency: 'BRL', dueDate: due('2026-08-05'), competenceDate: due('2026-07-01'), vacancyId: 'vac-clinico-aurora', doctorId: 'pro-ana', description: 'Plantão clínico - pagável profissional' },
-      { type: 'CLIENT_RECEIVABLE', direction: 'IN', status: 'APPROVED', amount: 2500, currency: 'BRL', dueDate: due('2026-07-20'), organizationId: 'organization-saude-nordeste', description: 'Cardiologia - recebível aprovado' },
-      { type: 'PROFESSIONAL_PAYABLE', direction: 'OUT', status: 'PAID', amount: 1700, currency: 'BRL', dueDate: due('2026-06-10'), paidAt: due('2026-06-10'), doctorId: 'pro-bruno', description: 'Pagamento realizado' },
-      { type: 'CLIENT_RECEIVABLE', direction: 'IN', status: 'OVERDUE', amount: 900, currency: 'BRL', dueDate: due('2026-05-30'), organizationId: 'organization-saude-nordeste', description: 'Recebível vencido' },
-      { type: 'PLATFORM_FEE', direction: 'IN', status: 'CANCELLED', amount: 300, currency: 'BRL', description: 'Taxa cancelada' },
-      { type: 'CLIENT_RECEIVABLE', direction: 'IN', status: 'CONTESTED', amount: 600, currency: 'BRL', description: 'Recebível contestado' },
-    ],
-  });
+  const fins: any[] = [
+    { id: 'fin-1', type: 'CLIENT_RECEIVABLE', direction: 'IN', status: 'PENDING_APPROVAL', amount: 1800, currency: 'BRL', dueDate: due('2026-07-31'), competenceDate: due('2026-07-01'), vacancyId: 'vac-clinico-aurora', organizationId: 'organization-saude-nordeste', contractId: 'contract-plantao-aurora', description: 'Plantão clínico - recebível cliente' },
+    { id: 'fin-2', type: 'PROFESSIONAL_PAYABLE', direction: 'OUT', status: 'PENDING_APPROVAL', amount: 1200, currency: 'BRL', dueDate: due('2026-08-05'), competenceDate: due('2026-07-01'), vacancyId: 'vac-clinico-aurora', doctorId: 'pro-ana', description: 'Plantão clínico - pagável profissional' },
+    { id: 'fin-3', type: 'CLIENT_RECEIVABLE', direction: 'IN', status: 'APPROVED', amount: 2500, currency: 'BRL', dueDate: due('2026-07-20'), organizationId: 'organization-saude-nordeste', description: 'Cardiologia - recebível aprovado' },
+    { id: 'fin-4', type: 'PROFESSIONAL_PAYABLE', direction: 'OUT', status: 'PAID', amount: 1700, currency: 'BRL', dueDate: due('2026-06-10'), paidAt: due('2026-06-10'), doctorId: 'pro-bruno', description: 'Pagamento realizado' },
+    { id: 'fin-5', type: 'CLIENT_RECEIVABLE', direction: 'IN', status: 'OVERDUE', amount: 900, currency: 'BRL', dueDate: due('2026-05-30'), organizationId: 'organization-saude-nordeste', description: 'Recebível vencido' },
+    { id: 'fin-6', type: 'PLATFORM_FEE', direction: 'IN', status: 'CANCELLED', amount: 300, currency: 'BRL', description: 'Taxa cancelada' },
+    { id: 'fin-7', type: 'CLIENT_RECEIVABLE', direction: 'IN', status: 'CONTESTED', amount: 600, currency: 'BRL', description: 'Recebível contestado' },
+  ];
+  for (const f of fins) {
+    await prisma.financialEntry.upsert({ where: { id: f.id }, update: {}, create: f });
+  }
 
   // Auditoria de exemplo
   const admin = await prisma.user.findUnique({ where: { email } });
-  await prisma.auditLog.deleteMany({});
-  await prisma.auditLog.createMany({
-    data: [
-      { actorUserId: admin?.id, action: 'contracts.create', entityType: 'Contract', entityId: 'contract-plantao-aurora', payload: { code: 'CON-2026-0001', status: 'ACTIVE' } },
-      { actorUserId: admin?.id, action: 'vacancies.create', entityType: 'Vacancy', entityId: 'vac-clinico-aurora', payload: { code: 'VAG-2026-ora' } },
-      { actorUserId: admin?.id, action: 'applications.update', entityType: 'Application', entityId: null },
-    ],
-  });
+  const audits: any[] = [
+    { id: 'audit-1', actorUserId: admin?.id, action: 'contracts.create', entityType: 'Contract', entityId: 'contract-plantao-aurora', payload: { code: 'CON-2026-0001', status: 'ACTIVE' } },
+    { id: 'audit-2', actorUserId: admin?.id, action: 'vacancies.create', entityType: 'Vacancy', entityId: 'vac-clinico-aurora', payload: { code: 'VAG-2026-ora' } },
+    { id: 'audit-3', actorUserId: admin?.id, action: 'applications.update', entityType: 'Application', entityId: null },
+  ];
+  for (const a of audits) {
+    await prisma.auditLog.upsert({ where: { id: a.id }, update: {}, create: a });
+  }
 
   // eslint-disable-next-line no-console
   console.log(`Seed concluído. Admin: ${email} | ${vacancies.length} vagas, ${pros.length} profissionais.`);
