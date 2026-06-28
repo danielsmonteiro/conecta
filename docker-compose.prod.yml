@@ -30,6 +30,8 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-healthmatch}?schema=public
       PORT: '3000'
+      # Fuso da aplicação (default Fortaleza, parametrizável). Banco fica em UTC.
+      TZ: ${TZ:-America/Fortaleza}
       CORS_ORIGIN: ${PUBLIC_URL:-http://localhost:3001}
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?defina}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?defina}
@@ -54,6 +56,7 @@ services:
       - backend
     environment:
       BACKEND_URL: http://backend:3000
+      TZ: ${TZ:-America/Fortaleza}
     ports:
       - '3001:3000'
 

@@ -32,6 +32,8 @@ services:
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-healthmatch}:${POSTGRES_PASSWORD:-healthmatch}@db:5432/${POSTGRES_DB:-healthmatch}?schema=public
       PORT: '3000'
+      # Fuso da aplicação (default Fortaleza, parametrizável). Banco fica em UTC.
+      TZ: ${TZ:-America/Fortaleza}
       # O frontend é proxy same-origin (/api), então CORS normalmente nem entra em
       # jogo. Mantemos origens da LAN liberadas caso o backend (:3000) seja chamado
       # direto do browser de outra máquina. Ajuste CORS_ORIGIN no .env para seu IP.
@@ -91,6 +93,7 @@ services:
       - backend
     environment:
       BACKEND_URL: http://backend:3000
+      TZ: ${TZ:-America/Fortaleza}
     volumes:
       - ./frontend:/app
       - /app/node_modules
