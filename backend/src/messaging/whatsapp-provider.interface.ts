@@ -9,6 +9,10 @@ export interface OutboundMessage {
   to: string; // telefone em E.164 (ex.: +5585999998888) ou id do canal
   body: string;
   conversationId?: string;
+  // Envio por template (obrigatório p/ abordagem proativa no WhatsApp oficial).
+  // No Twilio: ContentSid + ContentVariables. Ignorado pelo OpenWA (usa body).
+  templateSid?: string;
+  templateVars?: Record<string, string>;
 }
 
 /** Resultado normalizado de uma tentativa de envio. */

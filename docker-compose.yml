@@ -43,6 +43,13 @@ services:
       COOKIE_SECURE: 'false'
       SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@healthmatch.local}
       SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-changeme123}
+      # Twilio (oficial). Segredos via .env (git-ignored).
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-}
+      TWILIO_MESSAGING_SERVICE_SID: ${TWILIO_MESSAGING_SERVICE_SID:-}
+      TWILIO_DEFAULT_CONTENT_SID: ${TWILIO_DEFAULT_CONTENT_SID:-}
+      TWILIO_VALIDATE_SIGNATURE: ${TWILIO_VALIDATE_SIGNATURE:-false}
       # OpenWA (app separado, na rede compartilhada openwa-network). Default de
       # envio segue Twilio; OpenWA é opt-in (MESSAGING_PROVIDER=openwa por conversa/teste).
       OPENWA_BASE_URL: http://openwa-api:2785

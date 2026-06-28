@@ -47,7 +47,20 @@ export class MessagingAdminController {
   }
 
   @Post('test-send')
-  test(@Body() body: { conversationId: string; body: string; provider?: string }) {
-    return this.messaging.sendFromConversation(body.conversationId, body.body, { providerKey: body.provider });
+  test(
+    @Body()
+    body: {
+      conversationId: string;
+      body?: string;
+      provider?: string;
+      contentSid?: string;
+      contentVariables?: Record<string, string>;
+    },
+  ) {
+    return this.messaging.sendFromConversation(body.conversationId, body.body ?? '', {
+      providerKey: body.provider,
+      templateSid: body.contentSid,
+      templateVars: body.contentVariables,
+    });
   }
 }

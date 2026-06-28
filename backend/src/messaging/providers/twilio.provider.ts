@@ -55,7 +55,15 @@ export class TwilioProvider implements WhatsAppProvider {
     } else {
       params.set('From', this.toWhatsApp(e.TWILIO_WHATSAPP_FROM!));
     }
-    params.set('Body', msg.body);
+    // Template explícito → sempre template (abordagem proativa). Sem template mas
+    // com texto → texto livre (janela 24h). Sem ambos → template default do env.
+    const templateSid = msg.templateSid ?? (msg.body ? undefined : e.TWILIO_DEFAULT_CONTENT_SID);
+    if (templateSid) {
+      params.set('ContentSid', templateSid);
+      if (msg.templateVars) params.set('ContentVariables', JSON.stringify(msg.templateVars));
+    } else {
+      params.set('Body', msg.body);
+    }
 
     const auth = Buffer.from(`${accountSid}:${e.TWILIO_AUTH_TOKEN}`).toString('base64');
     const requestPayload = Object.fromEntries(params);

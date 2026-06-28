@@ -101,7 +101,11 @@ export class MessagingService implements OnModuleInit {
    * Cria a Message OUTBOUND + OutboundMessageLog (QUEUED) e tenta o envio.
    * Usado pela tela de Conversas e (futuramente) pela IA.
    */
-  async sendFromConversation(conversationId: string, body: string, opts: { sentByAi?: boolean; providerKey?: string } = {}) {
+  async sendFromConversation(
+    conversationId: string,
+    body: string,
+    opts: { sentByAi?: boolean; providerKey?: string; templateSid?: string; templateVars?: Record<string, string> } = {},
+  ) {
     const conv = await this.prisma.conversation.findUnique({
       where: { id: conversationId },
       include: { professional: true },
@@ -109,30 +113,40 @@ export class MessagingService implements OnModuleInit {
     if (!conv) throw new Error('Conversa não encontrada.');
     const to = conv.professional?.whatsapp ?? '';
     const providerKey = await this.activeProviderKey(opts.providerKey);
+    const template = opts.templateSid ? { sid: opts.templateSid, vars: opts.templateVars } : undefined;
+    // Texto do registro: o corpo, ou um rótulo do template quando for proativo.
+    const logBody = body || (template ? `[template ${template.sid}]` : '');
 
     const [message, log] = await this.prisma.$transaction([
       this.prisma.message.create({
-        data: { conversationId, direction: 'OUTBOUND', body, status: 'QUEUED', sentByAi: !!opts.sentByAi },
+        data: { conversationId, direction: 'OUTBOUND', body: logBody, status: 'QUEUED', sentByAi: !!opts.sentByAi },
       }),
       this.prisma.outboundMessageLog.create({
-        data: { conversationId, provider: providerKey, to: to || 'unknown', body, status: 'QUEUED' },
+        data: { conversationId, provider: providerKey, to: to || 'unknown', body: logBody, status: 'QUEUED' },
       }),
-      this.prisma.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: new Date(), lastMessagePreview: body.slice(0, 140) } }),
+      this.prisma.conversation.update({ where: { id: conversationId }, data: { lastMessageAt: new Date(), lastMessagePreview: logBody.slice(0, 140) } }),
     ]);
 
     // Tentativa imediata (best-effort); se falhar/ficar QUEUED, o drain reprocessa.
-    await this.dispatch(log.id, message.id, to, body, providerKey).catch((e) => this.logger.error(e));
+    await this.dispatch(log.id, message.id, to, body, providerKey, template).catch((e) => this.logger.error(e));
     return message;
   }
 
   /** Envia um log específico via provedor e propaga o status para a Message. */
-  private async dispatch(logId: string, messageId: string | null, to: string, body: string, providerKey: string) {
+  private async dispatch(
+    logId: string,
+    messageId: string | null,
+    to: string,
+    body: string,
+    providerKey: string,
+    template?: { sid: string; vars?: Record<string, string> },
+  ) {
     const provider = this.byKey(providerKey);
     if (!to || to === 'unknown') {
       await this.markFailed(logId, messageId, 'NO_RECIPIENT', 'Profissional sem WhatsApp.');
       return;
     }
-    const result = await provider.send({ to, body, conversationId: undefined });
+    const result = await provider.send({ to, body, templateSid: template?.sid, templateVars: template?.vars });
     await this.prisma.outboundMessageLog.update({
       where: { id: logId },
       data: {
