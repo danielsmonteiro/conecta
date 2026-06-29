@@ -3,8 +3,8 @@ import type { NextRequest } from 'next/server';
 
 /**
  * Protege todas as rotas autenticadas. Sem cookie de sessão → redireciona para
- * /login. O matcher exclui /login, o hotsite público /v/*, rotas de API, assets
- * do Next e arquivos estáticos. O refresh do access token acontece no cliente.
+ * /login. O matcher exclui /login, o hotsite público /v/*, o cadastro público
+ * /cadastro/*, rotas de API, assets do Next e estáticos. Refresh do token no cliente.
  */
 export function middleware(req: NextRequest) {
   const hasSession =
@@ -20,5 +20,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!login|v/|api|_next/static|_next/image|favicon.ico).*)'],
+  matcher: ['/((?!login|v/|cadastro/|api|_next/static|_next/image|favicon.ico).*)'],
 };

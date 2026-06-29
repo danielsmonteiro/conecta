@@ -93,6 +93,8 @@ services:
       AI_FALLBACK_MESSAGE: ${AI_FALLBACK_MESSAGE:-}
       AI_GUARDRAILS_ENABLED: ${AI_GUARDRAILS_ENABLED:-true}
       OPERATOR_NOTIFY_WEBHOOK_URL: ${OPERATOR_NOTIFY_WEBHOOK_URL:-}
+    volumes:
+      - uploads:/data
     networks:
       - default
       - openwa
@@ -129,6 +131,7 @@ volumes:
   redisdata:
   caddy_data:
   caddy_config:
+  uploads:
 
 networks:
   default:

@@ -110,6 +110,7 @@ services:
     volumes:
       - ./backend:/app
       - /app/node_modules
+      - uploads:/data
     networks:
       - default
       - openwa
@@ -152,6 +153,7 @@ volumes:
   redisdata:
   caddy_data:
   caddy_config:
+  uploads:
 
 networks:
   # Rede do app (db, backend, frontend, caddy).

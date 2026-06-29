@@ -24,6 +24,7 @@ import { MessagingModule } from './messaging/messaging.module';
 import { OrganizationsModule } from './organizations/organizations.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { PublicAgenciesModule } from './public-agencies/public-agencies.module';
+import { RegistrationModule } from './registration/registration.module';
 import { SettingsModule } from './settings/settings.module';
 import { SpecialtiesModule } from './specialties/specialties.module';
 import { UsersModule } from './users/users.module';
@@ -51,6 +52,7 @@ import { VacanciesModule } from './vacancies/vacancies.module';
     ConversationsModule,
     CampaignsModule,
     HotsiteModule,
+    RegistrationModule,
     MessagingModule,
     AiModule,
     MemoryModule,

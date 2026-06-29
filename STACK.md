@@ -135,6 +135,39 @@ IA recomenda vagas compatíveis e facilita a candidatura.
   surgir vaga aderente. **Opt-out** e "não prometer contratação" são compartilhados (tool
   `solicitar_descadastro` + guardrails). Origem exibida na tela de Candidaturas (label).
 
+## Cadastro progressivo de novo profissional (magic-link + autosave)
+
+Profissional **sem cadastro** demonstra interesse → a IA envia um link de **cadastro**
+mobile-first com **salvamento automático**, retomada e continuidade entre dispositivos, e
+confirma a candidatura quando os dados mínimos estão preenchidos (documentos são complementares).
+
+- **Magic-link de cadastro**: reusa `CandidacyLink` com `kind='REGISTER'` + `draft` (Json,
+  autosave) + `draftUpdatedAt`. Token opaco, temporário (`REGISTRATION_LINK_TTL_HOURS`, default
+  336h/14d), associado a (profissional, vaga, canal); log de acesso. URL `PUBLIC_BASE_URL/cadastro/:token`.
+- **Tool de IA `enviar_link_cadastro`**: usada quando o profissional está **INCOMPLETE** (novo).
+  O prompt escolhe automaticamente: cadastrado→`enviar_link_vaga` (hotsite); novo→`enviar_link_cadastro`.
+- **Endpoints públicos** (token = autenticação):
+  - `GET /api/cadastro/:token` → vaga + **prefill do WhatsApp** (nome/cidade/profissão da memória,
+    evita repetir) + rascunho + etapas (done) + `missingMin`/`canConfirm` + `remainingToConfirm` + documentos.
+  - `POST /api/cadastro/:token` → **autosave**: mescla o patch no rascunho e persiste
+    progressivamente no perfil + memória (durável e cross-device). Retorna o estado atualizado.
+  - `POST /api/cadastro/:token/confirm` → exige só os **dados mínimos** (nome, profissão, cidade;
+    profissão da memória conta). Cria `Application` **origin `WHATSAPP_REGISTRATION`** (idempotente),
+    marca o profissional `ACTIVE` + credencial (`PENDING_VALIDATION` se há doc, senão `MISSING_DOCUMENTS`),
+    confirma o link e envia confirmação por WhatsApp. `410` se expirado.
+  - `POST /api/cadastro/:token/documents` → **upload real** (multipart, PDF/JPG/PNG, ≤8MB) p/ volume
+    `uploads:/data`; cria `ProfessionalDocument` (status SENT; substitui a versão anterior do mesmo tipo,
+    mantém histórico via `supersededAt`). Docs são **complementares** (não bloqueiam a confirmação).
+  - `GET /api/registration/professionals/:id/documents` (autenticado) → docs p/ o contratante.
+- **Continuidade entre dispositivos**: o rascunho fica **no servidor** (keyed pelo token), não no
+  dispositivo — abrir o mesmo link em outro aparelho recupera tudo. Identidade = magic-link.
+- **Página mobile-first** (`frontend/app/cadastro/[token]/page.tsx`, rota pública no `middleware.ts`):
+  etapas 1–5 (dados básicos, perfil, disponibilidade, documentos, confirmação), autosave debounced
+  com aviso "Cadastro salvo automaticamente", progresso "Faltam X etapas", upload por tipo de
+  documento, botão "Confirmar candidatura" habilitado só com os mínimos. Estados active/confirmed/expired.
+- **Contratante**: Candidaturas mostra origem "WhatsApp + novo cadastro" + coluna **Cadastro**
+  (Completo/Em andamento) + indicação de documento pendente. A IA não promete contratação.
+
 ## Hotsite da vaga — confirmação one-click (magic-link)
 
 Profissional já cadastrado demonstra interesse → a IA envia um **link seguro** para uma

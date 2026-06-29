@@ -511,6 +511,7 @@ enum ApplicationOrigin {
   IMPORT
   MATCHING
   HOTSITE
+  WHATSAPP_REGISTRATION
 }
 
 enum MatchCategory {
@@ -861,7 +862,12 @@ model CandidacyLink {
   vacancyId      String
   conversationId String?
   channel        String    @default("WHATSAPP")
+  // CONFIRM = hotsite one-click (cadastrado); REGISTER = cadastro progressivo (novo).
+  kind           String    @default("CONFIRM")
   status         String    @default("ACTIVE") // ACTIVE | CONFIRMED | REVOKED
+  // Rascunho do cadastro progressivo (autosave; permite retomar e trocar de dispositivo).
+  draft          Json?
+  draftUpdatedAt DateTime?
   expiresAt      DateTime
   firstAccessedAt DateTime?
   lastAccessedAt DateTime?
@@ -875,4 +881,26 @@ model CandidacyLink {
 
   @@index([professionalId])
   @@index([vacancyId])
+}
+
+// Documento comprobatório enviado pelo profissional (cadastro progressivo). Arquivo
+// fica em volume do servidor (storageKey); aqui guardamos metadados + status + histórico.
+model ProfessionalDocument {
+  id             String    @id @default(cuid())
+  professionalId String
+  candidacyLinkId String?
+  kind           String    // ex.: registro_profissional, identificacao, curriculo, certificado, comprovante_vaga
+  label          String?
+  fileName       String
+  mimeType       String
+  size           Int
+  storageKey     String    // caminho relativo no volume de uploads
+  status         String    @default("SENT") // SENT | IN_REVIEW | APPROVED | REJECTED | NEEDS_ADJUSTMENT
+  notes          String?
+  supersededAt   DateTime? // quando substituído por uma nova versão
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([professionalId])
+  @@index([candidacyLinkId])
 }

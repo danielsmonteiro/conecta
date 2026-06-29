@@ -11,7 +11,8 @@ interface Application {
   status: string;
   origin: string;
   matchScore: number | null;
-  professional?: { fullName: string } | null;
+  hasPendingDocuments?: boolean;
+  professional?: { fullName: string; status?: string; credentialStatus?: string } | null;
   vacancy?: { title: string } | null;
 }
 
@@ -20,6 +21,7 @@ const ORIGIN_LABEL: Record<string, string> = {
   AI: 'IA (abordagem)',
   SELF_APPLICATION: 'WhatsApp (busca espontânea)',
   HOTSITE: 'WhatsApp + hotsite',
+  WHATSAPP_REGISTRATION: 'WhatsApp + novo cadastro',
   MATCHING: 'Matching',
   IMPORT: 'Importação',
 };
@@ -42,6 +44,19 @@ export default function CandidaturasPage() {
     { header: 'Profissional', render: (r) => <span className="font-medium text-hm-text">{r.professional?.fullName ?? '—'}</span> },
     { header: 'Vaga', render: (r) => <span className="text-hm-text-muted">{r.vacancy?.title ?? '—'}</span> },
     { header: 'Origem', render: (r) => <span className="text-hm-text-muted">{ORIGIN_LABEL[r.origin] ?? r.origin}</span> },
+    {
+      header: 'Cadastro',
+      render: (r) => {
+        const active = r.professional?.status === 'ACTIVE';
+        const pend = r.professional?.credentialStatus && r.professional.credentialStatus !== 'VALID';
+        return (
+          <span className="text-xs text-hm-text-muted">
+            {active ? 'Completo' : 'Em andamento'}
+            {pend ? <span className="text-hm-warning"> · doc. pendente</span> : null}
+          </span>
+        );
+      },
+    },
     { header: 'Score', render: (r) => <span className="text-hm-text-muted">{r.matchScore ?? '—'}</span> },
     { header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
     {

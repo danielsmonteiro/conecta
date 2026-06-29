@@ -4,6 +4,7 @@ import { MessagingService } from '../messaging/messaging.service';
 import { ProfessionalMemoryService } from '../memory/professional-memory.service';
 import { MatchingService } from '../matching/matching.service';
 import { HotsiteService } from '../hotsite/hotsite.module';
+import { RegistrationService } from '../registration/registration.module';
 import { GUARDRAIL_SAFE_REPLY, detectInjection, looksLikePromptLeak } from './guardrails';
 import { OpenAiProvider } from './llm/openai.provider';
 import { OperatorNotifierService } from './operator-notifier.service';
@@ -28,6 +29,7 @@ export class AiEngineService {
     private readonly notifier: OperatorNotifierService,
     private readonly matching: MatchingService,
     private readonly hotsite: HotsiteService,
+    private readonly registration: RegistrationService,
   ) {}
 
   private cfg() {
@@ -270,6 +272,20 @@ export class AiEngineService {
         },
       },
       {
+        name: 'enviar_link_cadastro',
+        description:
+          'Gera um LINK SEGURO para a página de CADASTRO progressivo (mobile-first, salva sozinho, dá p/ continuar em outro ' +
+          'dispositivo). Use quando o profissional demonstrar interesse mas AINDA NÃO TIVER CADASTRO (perfil incompleto). ' +
+          'Passe vacancyId quando a vaga vier de buscar_vagas; sem vacancyId usa a vaga vinculada. Retorna a URL — inclua-a ' +
+          'na mensagem explicando que ele faz um cadastro rápido e depois confirma a candidatura por lá.',
+        parameters: {
+          type: 'object',
+          properties: {
+            vacancyId: { type: 'string', description: 'Id da vaga (de buscar_vagas). Omita se a conversa já tem vaga vinculada.' },
+          },
+        },
+      },
+      {
         name: 'registrar_candidatura',
         description:
           'Registra a candidatura DIRETAMENTE na conversa. Use APENAS se o profissional pedir para confirmar pelo chat ' +
@@ -394,6 +410,18 @@ export class AiEngineService {
             isAction: true,
           };
         }
+        case 'enviar_link_cadastro': {
+          if (!conv.professionalId) return { content: 'Sem profissional vinculado.', isAction: false };
+          const vacancyId = (tc.arguments?.vacancyId ? String(tc.arguments.vacancyId) : null) || conv.vacancy?.id;
+          if (!vacancyId) return { content: 'Nenhuma vaga informada nem vinculada para o cadastro.', isAction: false };
+          const link = await this.registration.createLink({
+            professionalId: conv.professionalId,
+            vacancyId,
+            conversationId: conv.id,
+            channel: conv.channel,
+          });
+          return { content: JSON.stringify({ url: link.url, expiraEm: link.expiresAt }), isAction: true };
+        }
         case 'registrar_candidatura': {
           if (!conv.professionalId) return { content: 'Sem profissional vinculado.', isAction: false };
           // Vaga escolhida (busca espontânea) tem prioridade sobre a vinculada à conversa.
@@ -481,10 +509,16 @@ export class AiEngineService {
   private systemPrompt(conv: any, memBlock = ''): string {
     const nome = conv.professional?.fullName ?? 'profissional';
     const hasVaga = !!(conv.vacancy || conv.vacancyId);
+    // Cadastrado (apto a confirmar direto pelo hotsite) vs novo (precisa de cadastro progressivo).
+    const cadastrado = conv.professional?.status === 'ACTIVE';
+    const linkTool = cadastrado ? 'enviar_link_vaga' : 'enviar_link_cadastro';
+    const linkComo = cadastrado
+      ? 'gere o link do hotsite com enviar_link_vaga e convide-o a tocar em "Confirmar candidatura" (confirma em segundos)'
+      : 'como ele AINDA NÃO TEM CADASTRO completo, explique de forma simples que é preciso um cadastro rápido para avançar e gere o link com enviar_link_cadastro (página mobile que salva sozinha e dá p/ continuar em outro dispositivo); ao final ele confirma a candidatura por lá';
     const modo = hasVaga
       ? [
           'Esta conversa é sobre uma VAGA ESPECÍFICA (abordagem ativa). Use consultar_vaga para os detalhes antes de propor.',
-          'Se ele demonstrar interesse claro, gere o link do hotsite com enviar_link_vaga (sem vacancyId — usa a vaga vinculada) e inclua o link na mensagem, convidando-o a tocar em "Confirmar candidatura" para confirmar em segundos. Use registrar_candidatura apenas se ele pedir para confirmar pela própria conversa.',
+          `Se ele demonstrar interesse claro, ${linkComo} (sem vacancyId — usa a vaga vinculada) e inclua o link na mensagem. Use registrar_candidatura apenas se ele pedir para confirmar pela própria conversa.`,
           'Quando o profissional decidir sobre o plantão, use registrar_resposta. Nunca confirme a cobertura sozinho: ações críticas vão para um humano.',
         ]
       : [
@@ -492,7 +526,7 @@ export class AiEngineService {
           'Se ele quer oportunidades, garanta ao menos a profissão/especialidade (pergunte de forma breve só o necessário — NÃO exija dados em excesso antes de mostrar vagas) e então chame buscar_vagas.',
           'Apresente a melhor vaga ou uma lista curta (até 3) com as informações essenciais (cargo, estabelecimento, local, carga horária, contratação, remuneração quando houver, principais requisitos, início) e explique em 1 frase por que combina com o perfil dele.',
           'Permita que ele peça mais detalhes antes de decidir; pergunte se deseja se candidatar.',
-          'Quando o profissional indicar CLARAMENTE qual vaga quer (pelo nome, pelo número da lista ou "essa/a primeira"), NÃO repita a lista: se precisar do id, chame buscar_vagas para localizar o vacancyId correspondente e EM SEGUIDA, no mesmo turno, chame enviar_link_vaga com esse vacancyId; então envie o link convidando-o a tocar em "Confirmar candidatura". Use registrar_candidatura só se ele pedir para confirmar pela própria conversa.',
+          `Quando o profissional indicar CLARAMENTE qual vaga quer (pelo nome, número da lista ou "essa/a primeira"), NÃO repita a lista: se precisar do id, chame buscar_vagas para localizar o vacancyId e EM SEGUIDA, no mesmo turno, chame ${linkTool} com esse vacancyId — ${linkComo}. Use registrar_candidatura só se ele pedir para confirmar pela própria conversa.`,
           'Se buscar_vagas não retornar nada, informe com clareza que não há vagas compatíveis agora, diga que mantém o perfil ATIVO e que você avisará quando surgir algo compatível (ele continua recebendo oportunidades, salvo se pedir opt-out).',
         ];
     const base = [
