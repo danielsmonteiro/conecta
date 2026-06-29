@@ -19,6 +19,7 @@ const ORIGIN_LABEL: Record<string, string> = {
   MANUAL: 'Manual',
   AI: 'IA (abordagem)',
   SELF_APPLICATION: 'WhatsApp (busca espontânea)',
+  HOTSITE: 'WhatsApp + hotsite',
   MATCHING: 'Matching',
   IMPORT: 'Importação',
 };

@@ -14,6 +14,7 @@ import { ConversationsModule } from './conversations/conversations.module';
 import { DashboardModule } from './dashboard/dashboard.module';
 import { DocumentTypesModule } from './document-types/document-types.module';
 import { FinancialModule } from './financial/financial.module';
+import { HotsiteModule } from './hotsite/hotsite.module';
 import { HealthProfessionalsModule } from './health-professionals/health-professionals.module';
 import { HealthUnitsModule } from './health-units/health-units.module';
 import { IntegrationsModule } from './integrations/integrations.module';
@@ -49,6 +50,7 @@ import { VacanciesModule } from './vacancies/vacancies.module';
     FinancialModule,
     ConversationsModule,
     CampaignsModule,
+    HotsiteModule,
     MessagingModule,
     AiModule,
     MemoryModule,

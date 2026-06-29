@@ -135,6 +135,34 @@ IA recomenda vagas compatíveis e facilita a candidatura.
   surgir vaga aderente. **Opt-out** e "não prometer contratação" são compartilhados (tool
   `solicitar_descadastro` + guardrails). Origem exibida na tela de Candidaturas (label).
 
+## Hotsite da vaga — confirmação one-click (magic-link)
+
+Profissional já cadastrado demonstra interesse → a IA envia um **link seguro** para uma
+landing mobile-first onde ele confirma a candidatura em um toque (estilo "one-click").
+
+- **Magic-link**: modelo `CandidacyLink` — token opaco (`randomBytes(24)` hex, **sem dados
+  sensíveis na URL**), associado a (profissional, vaga, canal), `expiresAt` controlado
+  (`HOTSITE_LINK_TTL_HOURS`, default 72h), `status` ACTIVE/CONFIRMED. Registra acessos
+  (firstAccessedAt, lastAccessedAt, accessCount, lastUserAgent, lastIp) e a confirmação —
+  rastreabilidade WhatsApp↔hotsite↔vaga.
+- **Tool de IA `enviar_link_vaga`** (caminho PREFERIDO de confirmação): cria o link via
+  `HotsiteService` e retorna a URL `PUBLIC_BASE_URL/v/:token`; a IA inclui na mensagem e
+  convida a tocar em "Confirmar candidatura". `registrar_candidatura` (chat) vira fallback.
+- **Endpoints públicos** (token É a autenticação — sem JWT):
+  - `GET /api/hotsite/:token` → dados da vaga p/ a landing + registra o acesso. Retorna
+    `status` active/expired/confirmed + `pendingFields` (dados obrigatórios faltando).
+  - `POST /api/hotsite/:token/confirm` → cria `Application` **origin `HOTSITE`** (idempotente),
+    marca o link CONFIRMED, vincula a conversa à vaga (contratante vê o candidato) e envia a
+    **confirmação por WhatsApp** (best-effort). `410` se expirado.
+- **Landing mobile-first** (`frontend/app/v/[token]/page.tsx`, rota pública liberada no
+  `middleware.ts`): single-column, carrega rápido, mostra cargo/estabelecimento/cidade/carga/
+  modalidade/remuneração/início + "por que combina" + botão grande "Confirmar candidatura";
+  estados active/confirmed/expired/inválido. Não edita dados sensíveis (só confirma).
+- **Segurança**: token bearer temporário + log de acesso (UA/IP/origem). Step-up por OTP via
+  WhatsApp em acesso suspeito é hardening futuro (a história permite link mágico/token simples).
+- A IA não promete contratação/aprovação (guardrails + texto da página). Origem exibida em
+  Candidaturas como "WhatsApp + hotsite".
+
 ## Abordagem ativa (vínculo conversa↔vaga)
 
 Uma candidatura por WhatsApp acontece **dentro de uma conversa vinculada a uma vaga** — é esse

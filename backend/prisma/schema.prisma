@@ -510,6 +510,7 @@ enum ApplicationOrigin {
   SELF_APPLICATION
   IMPORT
   MATCHING
+  HOTSITE
 }
 
 enum MatchCategory {
@@ -848,4 +849,30 @@ model FinancialEntry {
   @@index([contractId])
   @@index([organizationId])
   @@index([doctorId])
+}
+
+// Magic-link do hotsite da vaga: token opaco, temporário, associado a profissional
+// + vaga + canal de origem. Sem dados sensíveis na URL; registra acessos para
+// rastreabilidade. A confirmação one-click cria a Application (origin HOTSITE).
+model CandidacyLink {
+  id             String    @id @default(cuid())
+  token          String    @unique
+  professionalId String
+  vacancyId      String
+  conversationId String?
+  channel        String    @default("WHATSAPP")
+  status         String    @default("ACTIVE") // ACTIVE | CONFIRMED | REVOKED
+  expiresAt      DateTime
+  firstAccessedAt DateTime?
+  lastAccessedAt DateTime?
+  accessCount    Int       @default(0)
+  lastUserAgent  String?
+  lastIp         String?
+  confirmedAt    DateTime?
+  applicationId  String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([professionalId])
+  @@index([vacancyId])
 }
