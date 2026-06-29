@@ -1,0 +1,137 @@
+# Conecta/HealthMatch — PRODUÇÃO (build otimizado, imutável).
+#   docker compose -f docker-compose.prod.yml up -d --build
+# Mesmo projeto (healthmatch-prod) → reusa volumes/cert. Para voltar ao hot-reload:
+#   docker compose up -d   (usa o docker-compose.yml)
+name: healthmatch-prod
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-healthmatch}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-healthmatch}
+      POSTGRES_DB: ${POSTGRES_DB:-healthmatch}
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-healthmatch}']
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+    command: redis-server --appendonly yes
+    ports:
+      - '127.0.0.1:6379:6379'
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  backend:
+    build:
+      context: ./backend
+      target: production
+    restart: always
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-healthmatch}:${POSTGRES_PASSWORD:-healthmatch}@db:5432/${POSTGRES_DB:-healthmatch}?schema=public
+      PORT: '3000'
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      TZ: ${TZ:-America/Fortaleza}
+      PUBLIC_BASE_URL: https://${APP_DOMAIN:?defina APP_DOMAIN no .env}
+      CORS_ORIGIN: https://${APP_DOMAIN}
+      COOKIE_SECURE: 'true'
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?defina}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?defina}
+      JWT_ACCESS_TTL: '900'
+      JWT_REFRESH_TTL: '604800'
+      # Reseed só sob demanda no 1º deploy; em produção mantém os dados.
+      SEED_ON_START: ${SEED_ON_START:-false}
+      SEED_ADMIN_EMAIL: ${SEED_ADMIN_EMAIL:-admin@healthmatch.local}
+      SEED_ADMIN_PASSWORD: ${SEED_ADMIN_PASSWORD:-changeme123}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_WHATSAPP_FROM: ${TWILIO_WHATSAPP_FROM:-}
+      TWILIO_MESSAGING_SERVICE_SID: ${TWILIO_MESSAGING_SERVICE_SID:-}
+      TWILIO_DEFAULT_CONTENT_SID: ${TWILIO_DEFAULT_CONTENT_SID:-}
+      TWILIO_VALIDATE_SIGNATURE: ${TWILIO_VALIDATE_SIGNATURE:-true}
+      OPENWA_BASE_URL: http://openwa-api:2785
+      OPENWA_API_KEY: ${OPENWA_API_KEY:-}
+      OPENWA_SESSION: ${OPENWA_SESSION:-default}
+      OPENWA_WEBHOOK_SECRET: ${OPENWA_WEBHOOK_SECRET:-}
+      OPENWA_VALIDATE_WEBHOOK: ${OPENWA_VALIDATE_WEBHOOK:-true}
+      OPENWA_SIGNATURE_HEADER: ${OPENWA_SIGNATURE_HEADER:-x-openwa-signature}
+      OPENWA_HMAC_ALGO: ${OPENWA_HMAC_ALGO:-sha256}
+      AI_ENABLED: ${AI_ENABLED:-true}
+      AI_PROVIDER: ${AI_PROVIDER:-openai}
+      AI_MODEL: ${AI_MODEL:-gpt-4o-mini}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      AI_AUTO_REPLY: ${AI_AUTO_REPLY:-true}
+      AI_DRY_RUN: ${AI_DRY_RUN:-true}
+      AI_REQUIRE_HUMAN: ${AI_REQUIRE_HUMAN:-true}
+      AI_MAX_CONTEXT_MESSAGES: ${AI_MAX_CONTEXT_MESSAGES:-20}
+      AI_DEBOUNCE_MS: ${AI_DEBOUNCE_MS:-4000}
+      AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-30000}
+      AI_LLM_RETRIES: ${AI_LLM_RETRIES:-2}
+      AI_JOB_ATTEMPTS: ${AI_JOB_ATTEMPTS:-3}
+      AI_WORKER_CONCURRENCY: ${AI_WORKER_CONCURRENCY:-5}
+      AI_FALLBACK_MESSAGE: ${AI_FALLBACK_MESSAGE:-}
+      AI_GUARDRAILS_ENABLED: ${AI_GUARDRAILS_ENABLED:-true}
+      OPERATOR_NOTIFY_WEBHOOK_URL: ${OPERATOR_NOTIFY_WEBHOOK_URL:-}
+    networks:
+      - default
+      - openwa
+
+  frontend:
+    build:
+      context: ./frontend
+      target: production
+    restart: always
+    depends_on:
+      - backend
+    environment:
+      BACKEND_URL: http://backend:3000
+      TZ: ${TZ:-America/Fortaleza}
+
+  caddy:
+    image: caddy:2-alpine
+    restart: always
+    depends_on:
+      - frontend
+    ports:
+      - '80:80'
+      - '443:443'
+    environment:
+      APP_DOMAIN: ${APP_DOMAIN:?defina APP_DOMAIN no .env}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  redisdata:
+  caddy_data:
+  caddy_config:
+
+networks:
+  default:
+  openwa:
+    external: true
+    name: openwa-network
