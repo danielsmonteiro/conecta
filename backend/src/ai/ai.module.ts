@@ -1,10 +1,12 @@
-import { Body, Controller, Get, Injectable, Module, Param, Post, Query, UseGuards, forwardRef } from '@nestjs/common';
+import { Body, Controller, Get, Injectable, Module, Param, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PaginationDto, paginate } from '../common/dto/pagination.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MessagingModule } from '../messaging/messaging.module';
 import { MemoryModule } from '../memory/memory.module';
+import { QueueModule } from '../queue/queue.module';
 import { AiEngineService } from './ai-engine.service';
+import { AiInboundWorker } from './ai-inbound.worker';
 import { OpenAiProvider } from './llm/openai.provider';
 
 @Injectable()
@@ -70,9 +72,9 @@ export class AiController {
 }
 
 @Module({
-  imports: [forwardRef(() => MessagingModule), MemoryModule],
+  imports: [MessagingModule, MemoryModule, QueueModule],
   controllers: [AiController],
-  providers: [AiService, AiEngineService, OpenAiProvider],
+  providers: [AiService, AiEngineService, OpenAiProvider, AiInboundWorker],
   exports: [AiEngineService],
 })
 export class AiModule {}

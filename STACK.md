@@ -111,3 +111,21 @@ O *system prompt* reforça "NUNCA invente nem deduza".
 
 O modelo `ProfessionalMemory` é aplicado por `prisma db push` no boot do backend (convenção do
 projeto — sem pasta de migrations). Reiniciar o backend cria a tabela.
+
+## Fila durável de IA (Redis/BullMQ)
+
+O processamento de IA dos inbounds **não é mais "promise solta"**: cada mensagem
+recebida enfileira um job durável (BullMQ sobre Redis) consumido por um worker.
+
+- **Durabilidade:** jobs ficam no Redis (AOF) → sobrevivem a restart/crash do backend.
+- **Retry:** `attempts=3` com backoff exponencial; em erro transitório (ex.: OpenAI 5xx)
+  o `run()` lança e o BullMQ reprocessa.
+- **Coalescing de rajada:** `delay` (= `AI_DEBOUNCE_MS`, default 4s) + `jobId` por conversa
+  unificam várias mensagens seguidas numa única execução/resposta.
+- **Arquitetura:** producer em `src/queue/` (fila `ai-inbound`), worker `AiInboundWorker`
+  no `AiModule` chama `AiEngineService.processInbound`. Requer o serviço `redis` no compose
+  (`REDIS_HOST`/`REDIS_PORT`). Ajustes: `AI_WORKER_CONCURRENCY`, `AI_JOB_ATTEMPTS`.
+
+> Limite conhecido: serialização por conversa depende do coalescing por `jobId` (uma
+> mensagem que chegue durante o run ativo é reprocessada na próxima mensagem). Para
+> garantia estrita multi-instância, um lock por conversa no Redis seria o próximo passo.

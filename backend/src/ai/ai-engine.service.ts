@@ -1,4 +1,4 @@
-import { Inject, Injectable, Logger, NotFoundException, ServiceUnavailableException, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { ProfessionalMemoryService } from '../memory/professional-memory.service';
@@ -16,19 +16,11 @@ const MAX_TOOL_ITERATIONS = 4;
 export class AiEngineService {
   private readonly logger = new Logger(AiEngineService.name);
 
-  // Debounce + serialização por conversa (single-instance, em memória).
-  // Agrupa mensagens em rajada numa só execução e garante NUNCA dois runs
-  // simultâneos na mesma conversa. Durabilidade entre restarts → fila (BullMQ).
-  private readonly debounceMs = Number(process.env.AI_DEBOUNCE_MS ?? 4000);
-  private readonly debounceTimers = new Map<string, NodeJS.Timeout>();
-  private readonly running = new Set<string>();
-  private readonly pendingRerun = new Set<string>();
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly openai: OpenAiProvider,
     private readonly memory: ProfessionalMemoryService,
-    @Inject(forwardRef(() => MessagingService)) private readonly messaging: MessagingService,
+    private readonly messaging: MessagingService,
   ) {}
 
   private cfg() {
@@ -48,51 +40,16 @@ export class AiEngineService {
   }
 
   /**
-   * Disparado por mensagem inbound. Não roda na hora: agenda um run com debounce,
-   * para agrupar mensagens enviadas em rajada (típico no WhatsApp) numa única
-   * resposta, e serializa para nunca processar a mesma conversa em paralelo.
+   * Processa um inbound — chamado pelo WORKER da fila durável (não mais "promise
+   * solta"). O debounce/coalescing da rajada é feito na fila (delay + jobId por
+   * conversa). Lança em erro para que o BullMQ aplique retry com backoff.
    */
-  async onInbound(conversationId: string) {
+  async processInbound(conversationId: string) {
     const cfg = this.cfg();
     if (!cfg.enabled || !cfg.autoReply) return;
-    this.scheduleInboundRun(conversationId);
-  }
-
-  /** (Re)agenda o run da conversa após uma janela de silêncio (debounce). */
-  private scheduleInboundRun(conversationId: string) {
-    const prev = this.debounceTimers.get(conversationId);
-    if (prev) clearTimeout(prev);
-    const timer = setTimeout(() => {
-      this.debounceTimers.delete(conversationId);
-      void this.runInboundSerialized(conversationId);
-    }, this.debounceMs);
-    if (typeof timer.unref === 'function') timer.unref();
-    this.debounceTimers.set(conversationId, timer);
-  }
-
-  /** Executa o run com exclusão mútua por conversa; reprocessa se chegou msg durante. */
-  private async runInboundSerialized(conversationId: string) {
-    if (this.running.has(conversationId)) {
-      // Já há um run em andamento nesta conversa → marca p/ reprocessar ao terminar.
-      this.pendingRerun.add(conversationId);
-      return;
-    }
-    this.running.add(conversationId);
-    try {
-      // Revalida estado no momento da execução (pode ter mudado durante a janela).
-      const conv = await this.prisma.conversation.findUnique({ where: { id: conversationId } });
-      if (conv?.aiEnabled && conv.status !== 'WAITING_HUMAN') {
-        await this.run(conversationId, { trigger: 'INBOUND_MESSAGE' });
-      }
-    } catch (e: any) {
-      this.logger.error(`IA inbound (${conversationId}): ${e?.message}`);
-    } finally {
-      this.running.delete(conversationId);
-      // Mensagens que chegaram durante o run → reprocessa (de novo com debounce).
-      if (this.pendingRerun.delete(conversationId)) {
-        this.scheduleInboundRun(conversationId);
-      }
-    }
+    const conv = await this.prisma.conversation.findUnique({ where: { id: conversationId } });
+    if (!conv?.aiEnabled || conv.status === 'WAITING_HUMAN') return;
+    await this.run(conversationId, { trigger: 'INBOUND_MESSAGE' });
   }
 
   /** Roda o motor numa conversa: contexto → modelo → tools → resposta. */

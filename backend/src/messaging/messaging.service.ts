@@ -1,7 +1,8 @@
-import { BadRequestException, Inject, Injectable, Logger, OnModuleInit, forwardRef } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ProviderType } from '@prisma/client';
+import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
-import { AiEngineService } from '../ai/ai-engine.service';
+import { AI_INBOUND_QUEUE_TOKEN, inboundJobOptions } from '../queue/queue.constants';
 import { TwilioProvider } from './providers/twilio.provider';
 import { OpenWaProvider } from './providers/openwa.provider';
 import { NormalizedInbound, WebhookRequest, WhatsAppProvider } from './whatsapp-provider.interface';
@@ -23,7 +24,7 @@ export class MessagingService implements OnModuleInit {
     private readonly prisma: PrismaService,
     twilio: TwilioProvider,
     openwa: OpenWaProvider,
-    @Inject(forwardRef(() => AiEngineService)) private readonly aiEngine: AiEngineService,
+    @Inject(AI_INBOUND_QUEUE_TOKEN) private readonly aiQueue: Queue,
   ) {
     this.providers.set(twilio.key, twilio);
     this.providers.set(openwa.key, openwa);
@@ -284,11 +285,10 @@ export class MessagingService implements OnModuleInit {
         data: { lastMessageAt: new Date(), lastMessagePreview: inbound.body.slice(0, 140) },
       }),
     ]);
-    // Épico 2: dispara o motor de IA em BACKGROUND (promise solta) — NÃO bloqueia
-    // a resposta do webhook, evitando timeout/reentrega do provedor (Twilio dá
-    // timeout ~10-15s). A checagem de aiEnabled/autoReply fica no engine.
-    // Single-instance: migrar para fila durável (BullMQ) ao escalar.
-    void this.aiEngine.onInbound(conversation.id).catch((e) => this.logger.error(`IA onInbound: ${e?.message}`));
+    // Enfileira o processamento de IA na fila DURÁVEL (BullMQ/Redis): sobrevive a
+    // restart, faz retry com backoff e coalesce rajadas (delay + jobId por conversa).
+    // Não bloqueia a resposta do webhook.
+    await this.aiQueue.add('process', { conversationId: conversation.id }, inboundJobOptions(conversation.id));
   }
 
   private async applyStatus(status: { externalMessageId: string; status: any }) {
