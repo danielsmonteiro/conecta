@@ -35,6 +35,12 @@ interface Financial {
   currency: string;
   total: { client: number; doctor: number; margin: number };
 }
+interface OutreachState {
+  status: 'sending' | 'ok' | 'err';
+  conversationId?: string;
+  openerSent?: boolean;
+  message?: string;
+}
 
 export default function VagaDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -42,6 +48,20 @@ export default function VagaDetailPage() {
   const [scores, setScores] = useState<MatchScore[]>([]);
   const [financial, setFinancial] = useState<Financial | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [outreach, setOutreach] = useState<Record<string, OutreachState>>({});
+
+  async function abordar(doctorId: string) {
+    setOutreach((o) => ({ ...o, [doctorId]: { status: 'sending' } }));
+    try {
+      const conv = await api.post<{ id: string; openerSent?: boolean }>('/conversations/outreach', {
+        vacancyId: id,
+        professionalId: doctorId,
+      });
+      setOutreach((o) => ({ ...o, [doctorId]: { status: 'ok', conversationId: conv.id, openerSent: conv.openerSent } }));
+    } catch (e) {
+      setOutreach((o) => ({ ...o, [doctorId]: { status: 'err', message: (e as Error).message } }));
+    }
+  }
 
   useEffect(() => {
     api.get<Profile>(`/vacancies/${id}/profile`).then(setProfile).catch((e) => setError(e.message));
@@ -83,22 +103,40 @@ export default function VagaDetailPage() {
               <p className="text-sm text-hm-text-subtle">Sem candidatos pontuados.</p>
             ) : (
               <ul className="space-y-2">
-                {scores.map((s) => (
+                {scores.map((s) => {
+                  const o = outreach[s.doctorId];
+                  return (
                   <li key={s.doctorId} className="flex items-center justify-between rounded-hm-sm border border-hm-border-soft px-3 py-2">
                     <div>
                       <p className="text-sm font-medium text-hm-text">{s.doctor?.fullName ?? '—'}</p>
                       <p className="text-xs text-hm-text-subtle">
                         {(s.positiveReasons ?? []).slice(0, 2).join(' · ') || s.category}
                       </p>
+                      {o?.status === 'ok' && (
+                        <p className="mt-1 text-xs text-hm-success">
+                          Abordagem iniciada{o.openerSent ? ' · convite enviado' : ''} ·{' '}
+                          <Link href={`/conversas/${o.conversationId}`} className="underline">ver conversa</Link>
+                        </p>
+                      )}
+                      {o?.status === 'err' && <p className="mt-1 text-xs text-hm-warning">Falha: {o.message}</p>}
                     </div>
                     <div className="flex items-center gap-2">
                       {!s.eligible && <span className="text-xs text-hm-warning">inelegível</span>}
                       <span className="rounded-full bg-hm-primary-soft px-2.5 py-0.5 text-sm font-semibold text-hm-primary">
                         {s.score}
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => abordar(s.doctorId)}
+                        disabled={o?.status === 'sending' || o?.status === 'ok'}
+                        className="btn-ghost text-xs disabled:opacity-50"
+                      >
+                        {o?.status === 'sending' ? 'Abordando…' : o?.status === 'ok' ? 'Abordado' : 'Abordar'}
+                      </button>
                     </div>
                   </li>
-                ))}
+                  );
+                })}
               </ul>
             )}
           </Panel>

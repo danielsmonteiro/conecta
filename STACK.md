@@ -67,6 +67,38 @@ Profissionais, Organizações, Contratos. Os demais itens do menu (Candidaturas,
 Matching, Alocações, Escala, Financeiro, Conversas, I.A., Integrações, Auditoria,
 Configurações) têm os endpoints prontos no backend — faltam as telas.
 
+## Abordagem ativa (vínculo conversa↔vaga)
+
+Uma candidatura por WhatsApp acontece **dentro de uma conversa vinculada a uma vaga** — é esse
+vínculo que diz à IA *qual* vaga oferecer e em qual registrar a candidatura (`conv.vacancy`). A
+**abordagem ativa** é o gatilho que cria esse vínculo: a partir do Matching da vaga, o operador
+"aborda" um profissional e o sistema abre/vincula a conversa de WhatsApp àquela vaga, liga a IA e
+envia o convite.
+
+### Endpoints
+
+- **`POST /api/conversations/outreach`** `{ vacancyId, professionalId, message?, sendOpener? }`
+  — reaproveita a conversa **aberta** do profissional (re-vinculando-a à vaga) ou cria uma nova;
+  define `vacancyId`, `channel=WHATSAPP`, `aiEnabled=true`, `status=AI_ACTIVE`; e, por padrão
+  (`sendOpener=true`), dispara a mensagem de convite (texto custom em `message` ou um *opener*
+  padrão com título/unidade/horário no fuso da aplicação). Retorna a conversa + `openerSent`.
+  Reaproveitar a conversa aberta evita múltiplas conversas abertas por profissional, que tornariam
+  ambíguo o roteamento do inbound (`ingestInbound` escolhe a aberta mais recente).
+- **`PATCH /api/conversations/:id`** aceita `vacancyId` para **vincular/trocar** (id válido, senão
+  404) ou **desvincular** (string vazia → `null`) a vaga manualmente.
+
+### UI
+
+Na tela da vaga (`/vagas/:id`), cada profissional do **Matching I.A.** tem o botão **"Abordar"**,
+que chama o outreach e mostra "Abordagem iniciada · convite enviado · ver conversa".
+
+### Fluxo completo da candidatura por WhatsApp
+
+1. **Abordar** (UI/endpoint) → conversa vinculada à vaga, IA ligada, convite enviado.
+2. Profissional **responde** no WhatsApp → webhook assinado → fila → worker → IA.
+3. Demonstrando interesse, a IA chama `registrar_candidatura` → `Application` PENDING `origin=AI`
+   **na vaga vinculada à conversa**.
+
 ## Memória por usuário (atendimento personalizado por IA)
 
 O bot de WhatsApp mantém uma **memória por profissional** para personalizar o atendimento
