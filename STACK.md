@@ -187,20 +187,3 @@ plantão, guardrail ou falha — o operador é avisado ativamente (além do cont
   `professional`, `reason`, `url`), incluindo **link direto** para a conversa
   (`PUBLIC_BASE_URL/conversas/:id`). Best-effort (timeout `OPERATOR_NOTIFY_TIMEOUT_MS`, 5s).
 - Sem webhook configurado → só log + o dashboard ("Aguardando humano").
-
-## LGPD — Fase 1 (controles técnicos)
-
-Primeiros controles de privacidade (a base legal, política publicada, DPO e DPAs são da
-camada jurídica/organizacional — não código):
-
-- **Aviso de privacidade no 1º contato** (Art. 9): ao criar um lead por inbound, o bot envia
-  uma mensagem informando finalidade, LGPD, link da política (`PRIVACY_POLICY_URL`) e como sair.
-  Controlado por `HealthProfessional.privacyNoticeSentAt` (enviado uma vez).
-- **Opt-out**: responder PARE/SAIR/STOP/CANCELAR marca `optedOut`, fecha a conversa, confirma e
-  **interrompe a IA**. Mensagens posteriores de quem optou por sair são ignoradas (não armazenadas).
-- **Redação de PII em logs**: telefones mascarados no `WebhookLog.payload` (`redactPayload`) e
-  helper `redactPII`/`maskPhone` (`common/lgpd.ts`) para logs de aplicação.
-- **Minimização no prompt**: só o primeiro nome vai para a OpenAI; CPF/telefone nunca vão.
-
-Pendente (Fases 2-4): criptografia de PII em repouso, retenção/expurgo, exportar/apagar (Art. 18),
-base legal + política + DPO + DPAs (jurídico).

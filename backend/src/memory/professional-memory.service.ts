@@ -38,7 +38,7 @@ export class ProfessionalMemoryService {
     const add = (rotulo: string, valor?: string | null) => {
       if (valor && String(valor).trim()) linhas.push(`- ${rotulo}: ${String(valor).trim()}`);
     };
-    add('Nome', professional.fullName?.split(' ')[0]); // LGPD: só o primeiro nome no prompt
+    add('Nome', professional.fullName);
     add('Profissão', memory?.profession);
     add('Especialidade', memory?.specialtyName ?? professional.mainSpecialty?.name);
     const local = [professional.city, professional.state].filter(Boolean).join('/');

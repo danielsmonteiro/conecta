@@ -313,9 +313,6 @@ model HealthProfessional {
   noShowCount              Int                 @default(0)
   attendanceRate           Decimal?            @db.Decimal(5, 2)
   notes                    String?
-  optedOut                 Boolean              @default(false) // LGPD: opt-out (respondeu PARE)
-  optedOutAt               DateTime?
-  privacyNoticeSentAt      DateTime?            // LGPD: aviso de privacidade já enviado?
   metrics                  ProfessionalMetrics?
   memory                   ProfessionalMemory?
   applications             Application[]
