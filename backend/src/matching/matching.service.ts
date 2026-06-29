@@ -49,6 +49,30 @@ export class MatchingService {
     return scored.sort((a, b) => Number(b.score) - Number(a.score)).slice(0, limit);
   }
 
+  /**
+   * Matching REVERSO: vagas em aberto mais compatíveis com um profissional.
+   * Reusa a mesma pontuação do matching, filtra elegíveis (atende mínimos, sem
+   * conflito) e vagas ainda não preenchidas. Usado na busca espontânea por WhatsApp.
+   */
+  async scoreProfessional(professionalId: string, limit = 3): Promise<MatchScore[]> {
+    const prof = await this.prisma.healthProfessional.findFirst({
+      where: { id: professionalId, deletedAt: null },
+      include: { allocations: true, mainSpecialty: { select: { id: true, name: true } }, primaryCbo: { select: { id: true, name: true, cbo2002Code: true, coCbo: true } } },
+    });
+    if (!prof) throw new NotFoundException('Professional not found');
+
+    const vacancies = await this.prisma.vacancy.findMany({
+      where: { deletedAt: null, status: { in: ['OPEN', 'MATCHING', 'CONTACTING', 'RECEIVING_APPLICATIONS', 'PARTIALLY_FILLED'] } },
+      include: { healthUnit: true, specialty: true, organization: true },
+    });
+
+    const scored = vacancies
+      .filter((v) => (v.filledDoctors ?? 0) < (v.requiredDoctors ?? 1)) // ainda há vaga
+      .map((v) => ({ ...this.score(v, prof, (prof as any).allocations), vacancy: v }))
+      .filter((s) => s.eligible);
+    return scored.sort((a, b) => Number(b.score) - Number(a.score)).slice(0, limit) as any;
+  }
+
   /** Lista paginada de scores das vagas em aberto (GET /api/matching/scores). */
   async scores(page = 1, limit = 12) {
     const vacancies = await this.prisma.vacancy.findMany({

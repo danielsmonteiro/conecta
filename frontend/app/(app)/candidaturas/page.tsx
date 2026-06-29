@@ -15,6 +15,14 @@ interface Application {
   vacancy?: { title: string } | null;
 }
 
+const ORIGIN_LABEL: Record<string, string> = {
+  MANUAL: 'Manual',
+  AI: 'IA (abordagem)',
+  SELF_APPLICATION: 'WhatsApp (busca espontânea)',
+  MATCHING: 'Matching',
+  IMPORT: 'Importação',
+};
+
 export default function CandidaturasPage() {
   const { data, loading, error, reload } = useApi<Paged<Application>>('/applications?limit=50');
   const [busy, setBusy] = useState<string | null>(null);
@@ -32,7 +40,7 @@ export default function CandidaturasPage() {
   const cols: Column<Application>[] = [
     { header: 'Profissional', render: (r) => <span className="font-medium text-hm-text">{r.professional?.fullName ?? '—'}</span> },
     { header: 'Vaga', render: (r) => <span className="text-hm-text-muted">{r.vacancy?.title ?? '—'}</span> },
-    { header: 'Origem', render: (r) => <span className="text-hm-text-muted">{r.origin}</span> },
+    { header: 'Origem', render: (r) => <span className="text-hm-text-muted">{ORIGIN_LABEL[r.origin] ?? r.origin}</span> },
     { header: 'Score', render: (r) => <span className="text-hm-text-muted">{r.matchScore ?? '—'}</span> },
     { header: 'Status', render: (r) => <StatusBadge status={r.status} /> },
     {

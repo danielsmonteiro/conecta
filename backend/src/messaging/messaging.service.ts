@@ -271,6 +271,8 @@ export class MessagingService implements OnModuleInit {
           professionalId: professional.id,
           channel: 'WHATSAPP',
           status: 'OPEN',
+          // Contato espontâneo: a IA responde automaticamente (busca espontânea de vagas).
+          aiEnabled: true,
           subject: 'Recebida via WhatsApp',
         },
       });

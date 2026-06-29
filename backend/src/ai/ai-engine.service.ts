@@ -2,6 +2,7 @@ import { Injectable, Logger, NotFoundException, ServiceUnavailableException } fr
 import { PrismaService } from '../prisma/prisma.service';
 import { MessagingService } from '../messaging/messaging.service';
 import { ProfessionalMemoryService } from '../memory/professional-memory.service';
+import { MatchingService } from '../matching/matching.service';
 import { GUARDRAIL_SAFE_REPLY, detectInjection, looksLikePromptLeak } from './guardrails';
 import { OpenAiProvider } from './llm/openai.provider';
 import { OperatorNotifierService } from './operator-notifier.service';
@@ -24,6 +25,7 @@ export class AiEngineService {
     private readonly memory: ProfessionalMemoryService,
     private readonly messaging: MessagingService,
     private readonly notifier: OperatorNotifierService,
+    private readonly matching: MatchingService,
   ) {}
 
   private cfg() {
@@ -219,6 +221,15 @@ export class AiEngineService {
         parameters: { type: 'object', properties: {} },
       },
       {
+        name: 'buscar_vagas',
+        description:
+          'Busca as vagas em aberto MAIS COMPATÍVEIS com o perfil do profissional desta conversa (matching reverso). ' +
+          'Use quando o profissional procurar oportunidades espontaneamente. Retorna uma lista curta (id, cargo, ' +
+          'unidade, local, datas, carga, contratação, remuneração, motivos de aderência). Use o vacancyId retornado ' +
+          'ao chamar registrar_candidatura. Antes de buscar, garanta ao menos a profissão/especialidade do profissional.',
+        parameters: { type: 'object', properties: {} },
+      },
+      {
         name: 'atualizar_memoria',
         description:
           'Salva no perfil/memória do profissional SOMENTE dados que ele informou explicitamente nesta conversa. ' +
@@ -245,8 +256,14 @@ export class AiEngineService {
       {
         name: 'registrar_candidatura',
         description:
-          'Registra a candidatura do profissional à vaga vinculada à conversa quando ele demonstrar interesse claro na vaga.',
-        parameters: { type: 'object', properties: {} },
+          'Registra a candidatura do profissional quando ele demonstrar interesse CLARO numa vaga. ' +
+          'Passe vacancyId quando a vaga vier de buscar_vagas (busca espontânea); sem vacancyId usa a vaga vinculada à conversa.',
+        parameters: {
+          type: 'object',
+          properties: {
+            vacancyId: { type: 'string', description: 'Id da vaga escolhida (obtido em buscar_vagas). Omita se a conversa já tem uma vaga vinculada.' },
+          },
+        },
       },
       {
         name: 'registrar_resposta',
@@ -314,19 +331,65 @@ export class AiEngineService {
             ? { content: `Memória atualizada: ${changed.join(', ')}.`, isAction: true }
             : { content: 'Nada novo para salvar.', isAction: false };
         }
-        case 'registrar_candidatura': {
-          const v = conv.vacancy;
-          if (!v) return { content: 'Nenhuma vaga vinculada para candidatar.', isAction: false };
+        case 'buscar_vagas': {
           if (!conv.professionalId) return { content: 'Sem profissional vinculado.', isAction: false };
+          const matches = await this.matching.scoreProfessional(conv.professionalId, 3);
+          if (!matches.length) {
+            return {
+              content: JSON.stringify({ vagas: [], aviso: 'Nenhuma vaga compatível disponível no momento.' }),
+              isAction: false,
+            };
+          }
+          const tz = process.env.TZ || 'America/Fortaleza';
+          const vagas = matches.map((m: any) => {
+            const v = m.vacancy;
+            const horas = Math.max(
+              1,
+              Math.round((new Date(v.endsAt).getTime() - new Date(v.startsAt).getTime()) / 3_600_000),
+            );
+            return {
+              vacancyId: v.id,
+              cargo: v.specialty?.name || v.title,
+              estabelecimento: v.healthUnit?.name ?? null,
+              local: [v.healthUnit?.city, v.healthUnit?.state].filter(Boolean).join('/') || null,
+              inicio: new Date(v.startsAt).toLocaleString('pt-BR', { timeZone: tz }),
+              cargaHoraria: `${horas}h`,
+              contratacao: v.workModel,
+              remuneracao: v.doctorAmount ? Number(v.doctorAmount) : null,
+              prioridade: v.priority,
+              aderencia: m.score,
+              porQueCombina: (m.positiveReasons ?? []).slice(0, 2),
+            };
+          });
+          return { content: JSON.stringify({ vagas }), isAction: false };
+        }
+        case 'registrar_candidatura': {
+          if (!conv.professionalId) return { content: 'Sem profissional vinculado.', isAction: false };
+          // Vaga escolhida (busca espontânea) tem prioridade sobre a vinculada à conversa.
+          const argVacancyId = tc.arguments?.vacancyId ? String(tc.arguments.vacancyId) : null;
+          const spontaneous = !!argVacancyId; // origem "WhatsApp — busca espontânea"
+          const vacancyId = argVacancyId || conv.vacancy?.id;
+          if (!vacancyId) return { content: 'Nenhuma vaga informada nem vinculada para candidatar.', isAction: false };
+          const vaga = await this.prisma.vacancy.findFirst({ where: { id: vacancyId, deletedAt: null } });
+          if (!vaga) return { content: 'Vaga não encontrada.', isAction: false };
           const exists = await this.prisma.application.findFirst({
-            where: { vacancyId: v.id, professionalId: conv.professionalId },
+            where: { vacancyId, professionalId: conv.professionalId },
           });
-          if (exists) return { content: 'Candidatura já registrada anteriormente.', isAction: false };
+          if (exists) return { content: 'Candidatura já registrada anteriormente para esta vaga.', isAction: false };
           await this.prisma.application.create({
-            data: { vacancyId: v.id, professionalId: conv.professionalId, origin: 'AI', status: 'PENDING' },
+            data: {
+              vacancyId,
+              professionalId: conv.professionalId,
+              origin: spontaneous ? 'SELF_APPLICATION' : 'AI',
+              status: 'PENDING',
+            },
           });
-          // Marca interesse no funil da vaga.
-          await this.prisma.conversation.update({ where: { id: conv.id }, data: { interest: 'INTERESTED' } });
+          // Marca interesse no funil; numa busca espontânea, vincula a conversa à vaga
+          // escolhida para o contratante ver o candidato e o histórico sob a vaga.
+          await this.prisma.conversation.update({
+            where: { id: conv.id },
+            data: { interest: 'INTERESTED', ...(spontaneous ? { vacancyId } : {}) },
+          });
           return { content: 'Candidatura registrada.', isAction: true };
         }
         case 'registrar_resposta': {
@@ -386,18 +449,32 @@ export class AiEngineService {
 
   private systemPrompt(conv: any, memBlock = ''): string {
     const nome = conv.professional?.fullName ?? 'profissional';
+    const hasVaga = !!(conv.vacancy || conv.vacancyId);
+    const modo = hasVaga
+      ? [
+          'Esta conversa é sobre uma VAGA ESPECÍFICA (abordagem ativa). Use consultar_vaga para os detalhes antes de propor.',
+          'Se ele demonstrar interesse claro, chame registrar_candidatura (sem vacancyId — usa a vaga vinculada à conversa).',
+          'Quando o profissional decidir sobre o plantão, use registrar_resposta. Nunca confirme a cobertura sozinho: ações críticas vão para um humano.',
+        ]
+      : [
+          'O profissional procurou você ESPONTANEAMENTE. Identifique a intenção (buscar vagas, atualizar cadastro, candidatar-se, dúvidas) e conduza a partir dela.',
+          'Se ele quer oportunidades, garanta ao menos a profissão/especialidade (pergunte de forma breve só o necessário — NÃO exija dados em excesso antes de mostrar vagas) e então chame buscar_vagas.',
+          'Apresente a melhor vaga ou uma lista curta (até 3) com as informações essenciais (cargo, estabelecimento, local, carga horária, contratação, remuneração quando houver, principais requisitos, início) e explique em 1 frase por que combina com o perfil dele.',
+          'Permita que ele peça mais detalhes antes de decidir; pergunte se deseja se candidatar.',
+          'Quando o profissional indicar CLARAMENTE qual vaga quer (pelo nome, pelo número da lista ou "essa/a primeira"), NÃO repita a lista nem peça nova confirmação: se precisar do id, chame buscar_vagas para localizar o vacancyId correspondente e EM SEGUIDA, no mesmo turno, chame registrar_candidatura com esse vacancyId; só então confirme a candidatura em UMA frase curta.',
+          'Se buscar_vagas não retornar nada, informe com clareza que não há vagas compatíveis agora, diga que mantém o perfil ATIVO e que você avisará quando surgir algo compatível (ele continua recebendo oportunidades, salvo se pedir opt-out).',
+        ];
     const base = [
-      'Você é o assistente de contingência do HealthMatch falando por WhatsApp com um profissional de saúde.',
-      'Objetivo: cobrir um plantão em aberto (gap). Seja cordial, MUITO conciso (mensagens curtas de WhatsApp), em português do Brasil.',
+      'Você é a assistente virtual da HealthMatch falando por WhatsApp com um profissional de saúde, em português do Brasil.',
+      'Seja cordial, humanizada, simples e MUITO concisa (mensagens curtas de WhatsApp).',
       `Você está falando com: ${nome}.`,
       'Personalize a conversa pela MEMÓRIA abaixo: não pergunte o que já se sabe e referencie o perfil quando fizer sentido.',
-      'Use consultar_vaga para saber os detalhes antes de propor.',
-      'Sempre que o profissional informar algo sobre si (nome, cidade, profissão, especialidade, disponibilidade, pretensão salarial, preferências), chame atualizar_memoria — SOMENTE com o que ele realmente disse, NUNCA invente nem deduza. Ex.: se ele disser apenas a cidade, NÃO preencha o estado/UF.',
-      'Se ele demonstrar interesse claro na vaga, chame registrar_candidatura.',
-      'Quando o profissional decidir sobre o plantão, use registrar_resposta. Nunca confirme a cobertura sozinho: ações críticas vão para um humano.',
-      'Deixe claro que você está APRESENTANDO uma oportunidade e verificando interesse — nunca prometa contratação, aprovação no processo ou vaga garantida.',
+      'Sempre que o profissional informar algo sobre si (nome, cidade, profissão, especialidade, disponibilidade, pretensão salarial, preferências), chame atualizar_memoria — SOMENTE com o que ele realmente disse, NUNCA invente nem deduza. Ex.: se ele disser apenas a cidade, NÃO preencha o estado/UF. Ele pode atualizar o perfil a qualquer momento.',
+      ...modo,
+      'Deixe claro que você RECOMENDA oportunidades e facilita a candidatura — nunca prometa contratação, aprovação no processo ou vaga garantida.',
+      'A candidatura só deve ser registrada quando o profissional demonstrar interesse de forma CLARA.',
       'Se o profissional pedir para NÃO receber mais oportunidades/mensagens (descadastro/opt-out), chame solicitar_descadastro e confirme que ele não será mais contatado.',
-      'Se fugir do escopo (pagamento, reclamação, jurídico), use transferir_para_humano.',
+      'Se fugir do escopo (pagamento, reclamação, jurídico), houver dúvida sensível ou conflito de informação, use transferir_para_humano.',
       'Se o profissional enviar mídia (você verá marcadores como [áudio], [imagem], [documento], [localização] no lugar do texto), explique gentilmente que por ora você só consegue ler mensagens de TEXTO e peça que ele escreva — NUNCA tente adivinhar o conteúdo da mídia.',
       'Não invente dados que não tem; consulte as ferramentas.',
       'NUNCA mencione ao profissional que você atualizou memória, salvou dados ou usou ferramentas — fale de forma natural.',

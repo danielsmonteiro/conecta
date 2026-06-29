@@ -111,6 +111,30 @@ interesse. A IA conduz a conversa pelas tools já existentes.
   seta via `registrar_candidatura`/`registrar_resposta`.
 - A IA nunca promete contratação/remuneração/aprovação (guardrails + system prompt).
 
+## Busca espontânea pelo profissional (WhatsApp → vagas)
+
+História inversa da campanha: o **profissional** procura a HealthMatch pelo WhatsApp e a
+IA recomenda vagas compatíveis e facilita a candidatura.
+
+- **IA responde automaticamente** a qualquer inbound: `ingestInbound` cria a conversa já
+  com `aiEnabled=true` (e identifica/cria o profissional pelo número).
+- **Matching reverso**: `MatchingService.scoreProfessional(professionalId, limit=3)` pontua
+  as vagas em aberto (não preenchidas) contra o perfil, filtra **elegíveis** e ordena por
+  aderência. Exposto à IA pela tool **`buscar_vagas`** (retorna id, cargo, estabelecimento,
+  local, datas, carga, contratação, remuneração, prioridade e motivos de aderência).
+- **Conversa conduzida pela IA** (prompt ramifica por modo): identifica intenção, completa o
+  mínimo do perfil via `atualizar_memoria` (sem exigir dados em excesso), chama `buscar_vagas`,
+  apresenta a melhor vaga ou uma lista curta (até 3) com o porquê, e pergunta se quer se
+  candidatar.
+- **Candidatura**: `registrar_candidatura` aceita `vacancyId` (a vaga escolhida). Com
+  `vacancyId` → origem **`SELF_APPLICATION`** ("WhatsApp — busca espontânea") e vincula a
+  conversa à vaga (o contratante vê o candidato e o histórico sob a vaga); sem `vacancyId` →
+  usa a vaga vinculada (origem `AI`, campanha). A IA confirma a candidatura ao profissional.
+- **Sem vagas compatíveis**: `buscar_vagas` retorna vazio; a IA informa, mantém o perfil
+  **ativo** (segue contatável, salvo opt-out) — e a campanha de publicação o contata quando
+  surgir vaga aderente. **Opt-out** e "não prometer contratação" são compartilhados (tool
+  `solicitar_descadastro` + guardrails). Origem exibida na tela de Candidaturas (label).
+
 ## Abordagem ativa (vínculo conversa↔vaga)
 
 Uma candidatura por WhatsApp acontece **dentro de uma conversa vinculada a uma vaga** — é esse

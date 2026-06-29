@@ -4,6 +4,7 @@ import { PaginationDto, paginate } from '../common/dto/pagination.dto';
 import { PrismaService } from '../prisma/prisma.service';
 import { MessagingModule } from '../messaging/messaging.module';
 import { MemoryModule } from '../memory/memory.module';
+import { MatchingModule } from '../matching/matching.module';
 import { QueueModule } from '../queue/queue.module';
 import { AiEngineService } from './ai-engine.service';
 import { AiInboundWorker } from './ai-inbound.worker';
@@ -73,7 +74,7 @@ export class AiController {
 }
 
 @Module({
-  imports: [MessagingModule, MemoryModule, QueueModule],
+  imports: [MessagingModule, MemoryModule, MatchingModule, QueueModule],
   controllers: [AiController],
   providers: [AiService, AiEngineService, OpenAiProvider, AiInboundWorker, OperatorNotifierService],
   exports: [AiEngineService],
