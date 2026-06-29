@@ -99,6 +99,9 @@ services:
       AI_JOB_ATTEMPTS: ${AI_JOB_ATTEMPTS:-3}
       AI_WORKER_CONCURRENCY: ${AI_WORKER_CONCURRENCY:-5}
       AI_FALLBACK_MESSAGE: ${AI_FALLBACK_MESSAGE:-}
+      AI_GUARDRAILS_ENABLED: ${AI_GUARDRAILS_ENABLED:-true}
+      # Notificação de handoff ao operador (Slack/Teams/Discord/relay). Vazio = só log + dashboard.
+      OPERATOR_NOTIFY_WEBHOOK_URL: ${OPERATOR_NOTIFY_WEBHOOK_URL:-}
     # Hot-reload: db push + seed idempotente + watch.
     command: >
       sh -c "npx prisma db push --accept-data-loss &&

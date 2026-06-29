@@ -8,6 +8,7 @@ import { QueueModule } from '../queue/queue.module';
 import { AiEngineService } from './ai-engine.service';
 import { AiInboundWorker } from './ai-inbound.worker';
 import { OpenAiProvider } from './llm/openai.provider';
+import { OperatorNotifierService } from './operator-notifier.service';
 
 @Injectable()
 export class AiService {
@@ -74,7 +75,7 @@ export class AiController {
 @Module({
   imports: [MessagingModule, MemoryModule, QueueModule],
   controllers: [AiController],
-  providers: [AiService, AiEngineService, OpenAiProvider, AiInboundWorker],
+  providers: [AiService, AiEngineService, OpenAiProvider, AiInboundWorker, OperatorNotifierService],
   exports: [AiEngineService],
 })
 export class AiModule {}

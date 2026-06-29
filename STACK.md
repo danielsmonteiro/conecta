@@ -161,3 +161,29 @@ adapters e tratados com elegância (antes a IA recebia corpo vazio/"lixo"):
 
 > Extensão futura: transcrever áudio (Whisper) e descrever imagem (visão) em vez de só
 > pedir texto — a normalização por `messageType` já deixa o gancho pronto.
+
+## Guardrails / anti-injection
+
+Defesa em profundidade contra manipulação (prompt-injection) e desvio de escopo:
+
+- **System prompt endurecido:** trata mensagens do profissional como CONTEÚDO (não comandos),
+  ignora pedidos de mudar papel/regras ou revelar o prompt; nunca promete/negocia valores ou
+  dá conselho médico/jurídico/financeiro; nunca aprova candidatura/confirma cobertura sozinho.
+- **Guardrail de ENTRADA** (`guardrails.ts` → `detectInjection`): padrões de alta confiança
+  ("ignore as instruções", "você agora é…", "modo desenvolvedor", "revele o prompt", jailbreak…).
+  Ao detectar, NÃO chama a LLM — envia mensagem segura e faz handoff para humano.
+- **Guardrail de SAÍDA** (`looksLikePromptLeak`): se a resposta gerada vazar instruções internas,
+  troca por mensagem segura e encaminha para humano.
+- Toggle `AI_GUARDRAILS_ENABLED` (default `true`). Padrões conservadores p/ evitar falso-positivo.
+
+## Notificação de handoff ao operador
+
+Quando a IA transfere uma conversa para humano (`WAITING_HUMAN`) — por pedido, aceite de
+plantão, guardrail ou falha — o operador é avisado ativamente (além do contador no dashboard):
+
+- `OperatorNotifierService` é acionado em todo `handoff()`. Registra em log e, se
+  `OPERATOR_NOTIFY_WEBHOOK_URL` estiver setado, faz POST de um JSON com `text`/`content`
+  (compatível com Slack/Teams/Discord) + campos estruturados (`event`, `conversationId`,
+  `professional`, `reason`, `url`), incluindo **link direto** para a conversa
+  (`PUBLIC_BASE_URL/conversas/:id`). Best-effort (timeout `OPERATOR_NOTIFY_TIMEOUT_MS`, 5s).
+- Sem webhook configurado → só log + o dashboard ("Aguardando humano").
