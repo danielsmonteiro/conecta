@@ -3,6 +3,7 @@ import { ProviderType } from '@prisma/client';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../prisma/prisma.service';
 import { AI_INBOUND_QUEUE_TOKEN, inboundJobOptions } from '../queue/queue.constants';
+import { OPT_OUT_CONFIRMATION, isOptOut, privacyNotice, redactPayload } from '../common/lgpd';
 import { TwilioProvider } from './providers/twilio.provider';
 import { OpenWaProvider } from './providers/openwa.provider';
 import { NormalizedInbound, WebhookRequest, WhatsAppProvider } from './whatsapp-provider.interface';
@@ -222,7 +223,7 @@ export class MessagingService implements OnModuleInit {
         provider: providerKey,
         eventType: inbound ? 'message' : status ? 'status' : 'unknown',
         externalEventId: inbound?.externalEventId ?? status?.externalMessageId,
-        payload: req.body as any,
+        payload: redactPayload(req.body) as any, // LGPD: telefone mascarado no log
         headers: this.safeHeaders(req.headers) as any,
         processed: valid && !!(inbound || status) && !duplicate,
         processedAt: new Date(),
@@ -259,6 +260,12 @@ export class MessagingService implements OnModuleInit {
       this.logger.log(`Novo profissional criado via WhatsApp inbound: ${professional.id}`);
     }
 
+    // LGPD — já optou por sair: ignora cedo (não armazena nem responde; minimização).
+    if (professional.optedOut) {
+      this.logger.log(`Mensagem ignorada (opt-out): profissional ${professional.id}`);
+      return;
+    }
+
     // Reaproveita a conversa aberta do profissional, se houver.
     let conversation = await this.prisma.conversation.findFirst({
       where: { professionalId: professional.id, status: { in: ['OPEN', 'AI_ACTIVE', 'WAITING_HUMAN'] } },
@@ -285,9 +292,30 @@ export class MessagingService implements OnModuleInit {
         data: { lastMessageAt: new Date(), lastMessagePreview: inbound.body.slice(0, 140) },
       }),
     ]);
+
+    // LGPD — opt-out: respondeu PARE/SAIR → marca, confirma e NÃO aciona a IA.
+    if (isOptOut(inbound.body)) {
+      await this.prisma.healthProfessional.update({
+        where: { id: professional.id },
+        data: { optedOut: true, optedOutAt: new Date() },
+      });
+      await this.prisma.conversation.update({ where: { id: conversation.id }, data: { status: 'CLOSED' } });
+      await this.sendFromConversation(conversation.id, OPT_OUT_CONFIRMATION).catch((e) => this.logger.error(e));
+      this.logger.log(`LGPD opt-out: profissional ${professional.id}`);
+      return;
+    }
+
+    // LGPD — aviso de privacidade no primeiro contato (transparência, Art. 9).
+    if (!professional.privacyNoticeSentAt) {
+      await this.sendFromConversation(conversation.id, privacyNotice()).catch((e) => this.logger.error(e));
+      await this.prisma.healthProfessional.update({
+        where: { id: professional.id },
+        data: { privacyNoticeSentAt: new Date() },
+      });
+    }
+
     // Enfileira o processamento de IA na fila DURÁVEL (BullMQ/Redis): sobrevive a
     // restart, faz retry com backoff e coalesce rajadas (delay + jobId por conversa).
-    // Não bloqueia a resposta do webhook.
     await this.aiQueue.add('process', { conversationId: conversation.id }, inboundJobOptions(conversation.id));
   }
 

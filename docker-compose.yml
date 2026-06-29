@@ -102,6 +102,8 @@ services:
       AI_GUARDRAILS_ENABLED: ${AI_GUARDRAILS_ENABLED:-true}
       # Notificação de handoff ao operador (Slack/Teams/Discord/relay). Vazio = só log + dashboard.
       OPERATOR_NOTIFY_WEBHOOK_URL: ${OPERATOR_NOTIFY_WEBHOOK_URL:-}
+      # LGPD: link da política de privacidade incluído no aviso do primeiro contato.
+      PRIVACY_POLICY_URL: ${PRIVACY_POLICY_URL:-}
     # Hot-reload: db push + seed idempotente + watch.
     command: >
       sh -c "npx prisma db push --accept-data-loss &&

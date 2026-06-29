@@ -51,8 +51,12 @@ export class AiEngineService {
   async processInbound(conversationId: string) {
     const cfg = this.cfg();
     if (!cfg.enabled || !cfg.autoReply) return;
-    const conv = await this.prisma.conversation.findUnique({ where: { id: conversationId } });
+    const conv = await this.prisma.conversation.findUnique({
+      where: { id: conversationId },
+      include: { professional: { select: { optedOut: true } } },
+    });
     if (!conv?.aiEnabled || conv.status === 'WAITING_HUMAN') return;
+    if (conv.professional?.optedOut) return; // LGPD: respeita opt-out (defesa em profundidade)
 
     // Guardrail de ENTRADA: tentativa de manipulação (prompt-injection) → não chama a
     // LLM, encaminha para um humano (ação segura).
@@ -355,7 +359,8 @@ export class AiEngineService {
   }
 
   private systemPrompt(conv: any, memBlock = ''): string {
-    const nome = conv.professional?.fullName ?? 'profissional';
+    // LGPD (minimização): só o primeiro nome vai para a OpenAI (CPF/telefone nunca vão).
+    const nome = (conv.professional?.fullName ?? 'profissional').split(' ')[0];
     const base = [
       'Você é o assistente de contingência do HealthMatch falando por WhatsApp com um profissional de saúde.',
       'Objetivo: cobrir um plantão em aberto (gap). Seja cordial, MUITO conciso (mensagens curtas de WhatsApp), em português do Brasil.',
