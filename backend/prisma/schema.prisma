@@ -485,6 +485,9 @@ model Vacancy {
   currency              String          @default("BRL")
   requiresHumanApproval Boolean         @default(true)
   autoStartCampaign     Boolean         @default(false)
+  // Tipos de documento OBRIGATÓRIOS antes de confirmar candidatura nesta vaga
+  // (kinds: registro_profissional, identificacao, curriculo, certificado, comprovante_vaga).
+  requiredDocuments     String[]        @default([])
   notes                 String?
   applications          Application[]
   allocations           Allocation[]

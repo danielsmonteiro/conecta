@@ -157,7 +157,13 @@ confirma a candidatura quando os dados mínimos estão preenchidos (documentos s
     confirma o link e envia confirmação por WhatsApp. `410` se expirado.
   - `POST /api/cadastro/:token/documents` → **upload real** (multipart, PDF/JPG/PNG, ≤8MB) p/ volume
     `uploads:/data`; cria `ProfessionalDocument` (status SENT; substitui a versão anterior do mesmo tipo,
-    mantém histórico via `supersededAt`). Docs são **complementares** (não bloqueiam a confirmação).
+    mantém histórico via `supersededAt`).
+- **Documentos obrigatórios por vaga (gating)**: `Vacancy.requiredDocuments String[]` lista os tipos
+  (kinds) exigidos antes de confirmar. A `view` retorna `requiredDocuments` + `missingRequiredDocs`;
+  `confirm` **bloqueia (400)** enquanto faltar algum obrigatório, e `canConfirm` exige dados mínimos
+  **e** docs obrigatórios enviados. Docs fora dessa lista são **complementares** (não bloqueiam — a
+  candidatura confirma "com pendências"). Os tipos exigidos são marcáveis no formulário da vaga
+  (nova/editar); a página de cadastro mostra "· obrigatório" e lista os que faltam.
   - `GET /api/registration/professionals/:id/documents` (autenticado) → docs p/ o contratante.
 - **Continuidade entre dispositivos**: o rascunho fica **no servidor** (keyed pelo token), não no
   dispositivo — abrir o mesmo link em outro aparelho recupera tudo. Identidade = magic-link.

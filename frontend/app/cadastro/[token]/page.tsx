@@ -13,6 +13,8 @@ interface State {
   suggested: Record<string, any>;
   missingMin: string[];
   canConfirm: boolean;
+  requiredDocuments: string[];
+  missingRequiredDocs: string[];
   steps: Step[];
   remainingToConfirm: number;
   documents: DocItem[];
@@ -29,6 +31,7 @@ const DOC_KINDS: [string, string][] = [
   ['registro_profissional', 'Registro profissional'], ['identificacao', 'Documento de identificação'],
   ['curriculo', 'Currículo'], ['certificado', 'Certificados'],
 ];
+const DOC_LABEL: Record<string, string> = Object.fromEntries(DOC_KINDS);
 const DOC_STATUS_LABEL: Record<string, string> = {
   SENT: 'Enviado', IN_REVIEW: 'Em análise', APPROVED: 'Aprovado', REJECTED: 'Recusado', NEEDS_ADJUSTMENT: 'Precisa de ajuste',
 };
@@ -146,15 +149,16 @@ export default function CadastroPage() {
         <Field label="Região de interesse" v={f('regionPreference')} on={(v) => update('regionPreference', v)} />
       </Section>
 
-      <Section n={4} title="Documentos (opcional agora)">
-        <p className="text-xs text-hm-text-subtle">PDF, JPG ou PNG. Você pode enviar agora ou depois pelo mesmo link — não impede a confirmação.</p>
+      <Section n={4} title="Documentos">
+        <p className="text-xs text-hm-text-subtle">PDF, JPG ou PNG. Documentos <b>obrigatórios</b> desta vaga precisam ser enviados antes de confirmar; os demais são complementares e podem ficar para depois.</p>
         {DOC_KINDS.map(([kind, label]) => {
           const doc = st?.documents.find((d) => d.kind === kind);
+          const required = st?.requiredDocuments?.includes(kind);
           return (
             <div key={kind} className="mt-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-hm-text">{label}</span>
-                {doc ? <span className="text-xs text-hm-success">{DOC_STATUS_LABEL[doc.status] || doc.status}</span> : <span className="text-xs text-hm-text-subtle">não enviado</span>}
+                <span className="text-sm text-hm-text">{label}{required && <span className="text-hm-warning"> · obrigatório</span>}</span>
+                {doc ? <span className="text-xs text-hm-success">{DOC_STATUS_LABEL[doc.status] || doc.status}</span> : <span className={`text-xs ${required ? 'text-hm-warning' : 'text-hm-text-subtle'}`}>não enviado</span>}
               </div>
               <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="mt-1 block w-full text-xs"
                 onChange={(e) => { const file = e.target.files?.[0]; if (file) uploadDoc(kind, file); }} />
@@ -166,7 +170,12 @@ export default function CadastroPage() {
 
       <Section n={5} title="Confirmação">
         <p className="text-sm text-hm-text-subtle">Revise seus dados principais e confirme sua candidatura.</p>
-        {!st?.canConfirm && <p className="mt-2 text-sm text-hm-warning">Faltam dados mínimos: {st?.missingMin.join(', ')}.</p>}
+        {!!st?.missingMin.length && <p className="mt-2 text-sm text-hm-warning">Faltam dados mínimos: {st?.missingMin.join(', ')}.</p>}
+        {!!st?.missingRequiredDocs?.length && (
+          <p className="mt-2 text-sm text-hm-warning">
+            Envie os documentos obrigatórios da vaga: {st.missingRequiredDocs.map((k) => DOC_LABEL[k] || k).join(', ')}.
+          </p>
+        )}
         {error && <p className="mt-2 text-sm text-hm-warning">{error}</p>}
         <button type="button" onClick={confirmar} disabled={!st?.canConfirm || confirming}
           className="btn-primary mt-3 w-full py-4 text-base font-semibold disabled:opacity-50">

@@ -26,6 +26,13 @@ import { MessagingService } from '../messaging/messaging.service';
 
 const UPLOAD_DIR = process.env.UPLOAD_DIR || '/data/uploads';
 const ALLOWED_MIME = ['application/pdf', 'image/jpeg', 'image/png'];
+const DOC_LABEL: Record<string, string> = {
+  registro_profissional: 'Registro profissional',
+  identificacao: 'Documento de identificação',
+  curriculo: 'Currículo',
+  certificado: 'Certificados',
+  comprovante_vaga: 'Comprovante exigido pela vaga',
+};
 const PROF_TYPES = [
   'PHYSICIAN', 'NURSE', 'NURSING_TECHNICIAN', 'PHYSIOTHERAPIST', 'PSYCHOLOGIST', 'NUTRITIONIST',
   'DENTIST', 'PHARMACIST', 'SPEECH_THERAPIST', 'OCCUPATIONAL_THERAPIST', 'SOCIAL_WORKER', 'BIOMEDICAL', 'OTHER',
@@ -114,14 +121,19 @@ export class RegistrationService {
     const missing = this.missingMin(prof, (link.draft as any) || {}, mem);
     if (missing.length) throw new BadRequestException(`Faltam dados mínimos: ${missing.join(', ')}.`);
 
+    const vaga = await this.prisma.vacancy.findFirst({ where: { id: link.vacancyId, deletedAt: null }, include: { specialty: true } });
+    if (!vaga) throw new NotFoundException('Vaga não encontrada.');
     const docs = await this.currentDocs(link.professionalId);
-    // Apto para candidatura; credencial reflete documentos (todos complementares).
+    // Gating: documentos OBRIGATÓRIOS da vaga precisam estar enviados antes de confirmar.
+    const missingDocs = this.missingRequiredDocs(vaga, docs);
+    if (missingDocs.length) {
+      throw new BadRequestException(`Envie os documentos obrigatórios da vaga antes de confirmar: ${missingDocs.map((k) => DOC_LABEL[k] || k).join(', ')}.`);
+    }
+    // Apto para candidatura; credencial reflete documentos (obrigatórios enviados → em validação).
     await this.prisma.healthProfessional.update({
       where: { id: link.professionalId },
       data: { status: 'ACTIVE', credentialStatus: docs.length ? 'PENDING_VALIDATION' : 'MISSING_DOCUMENTS' },
     });
-    const vaga = await this.prisma.vacancy.findFirst({ where: { id: link.vacancyId, deletedAt: null }, include: { specialty: true } });
-    if (!vaga) throw new NotFoundException('Vaga não encontrada.');
 
     let application = await this.prisma.application.findFirst({ where: { vacancyId: link.vacancyId, professionalId: link.professionalId } });
     if (!application) {
@@ -184,6 +196,14 @@ export class RegistrationService {
     return this.prisma.professionalDocument.findMany({
       where: { professionalId, supersededAt: null }, orderBy: { createdAt: 'desc' },
     });
+  }
+
+  // Documentos obrigatórios da vaga ainda NÃO enviados (kinds presentes nos docs atuais).
+  private missingRequiredDocs(vaga: any, docs: any[]): string[] {
+    const required: string[] = vaga?.requiredDocuments || [];
+    if (!required.length) return [];
+    const sent = new Set(docs.map((d) => d.kind));
+    return required.filter((k) => !sent.has(k));
   }
 
   private missingMin(prof: any, draft: any, mem?: any): string[] {
@@ -249,6 +269,8 @@ export class RegistrationService {
       availability: mem?.availability || '',
     };
     const missing = this.missingMin(prof, draft, mem);
+    const requiredDocuments: string[] = (vaga as any)?.requiredDocuments || [];
+    const missingRequiredDocs = this.missingRequiredDocs(vaga, docs);
     const status = link.status === 'CONFIRMED' ? 'confirmed' : this.isExpired(link) ? 'expired' : 'active';
 
     const get = (k: string) => (draft[k] ?? (suggested as any)[k] ?? '');
@@ -256,11 +278,16 @@ export class RegistrationService {
       basic: !!get('fullName') && !/^contato\s/i.test(String(get('fullName'))),
       professional: !!get('profession') && !!get('city'),
       availability: !!get('availability'),
-      documents: docs.length > 0,
+      // Etapa de documentos só é "concluída" com os obrigatórios enviados (ou sem exigência).
+      documents: missingRequiredDocs.length === 0 && (requiredDocuments.length > 0 || docs.length > 0),
     };
     const steps = STEPS.map((s) => ({ ...s, done: stepDone[s.key] }));
-    // "Faltam X etapas para confirmar" considera só as essenciais (básico + profissional).
-    const remainingToConfirm = ['basic', 'professional'].filter((k) => !stepDone[k]).length;
+    // "Faltam X etapas para confirmar": básico + profissional + (documentos se a vaga exigir).
+    const essential = ['basic', 'professional', ...(requiredDocuments.length ? ['documents'] : [])];
+    const remainingToConfirm = essential.filter((k) => !stepDone[k]).length;
+
+    // Só confirma com dados mínimos E documentos obrigatórios enviados.
+    const canConfirm = missing.length === 0 && missingRequiredDocs.length === 0;
 
     return {
       status,
@@ -271,7 +298,8 @@ export class RegistrationService {
       professional: { firstName: (suggested.fullName || 'Profissional').split(/\s+/)[0] },
       vaga: vaga ? { cargo: vaga.specialty?.name || vaga.title, titulo: vaga.title, cidade: [vaga.healthUnit?.city, vaga.healthUnit?.state].filter(Boolean).join('/') || vaga.healthUnit?.name || null } : null,
       draft, suggested,
-      missingMin: missing, canConfirm: missing.length === 0,
+      missingMin: missing, canConfirm,
+      requiredDocuments, missingRequiredDocs,
       steps, remainingToConfirm,
       documents: docs.map((d) => ({ id: d.id, kind: d.kind, fileName: d.fileName, status: d.status, createdAt: d.createdAt })),
     };

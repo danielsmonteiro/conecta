@@ -34,7 +34,17 @@ export default function NovaVagaPage() {
     clientAmount: '',
     doctorAmount: '',
     description: '',
+    requiredDocuments: [] as string[],
   });
+
+  function toggleDoc(kind: string) {
+    setForm((f) => ({
+      ...f,
+      requiredDocuments: f.requiredDocuments.includes(kind)
+        ? f.requiredDocuments.filter((k) => k !== kind)
+        : [...f.requiredDocuments, kind],
+    }));
+  }
 
   useEffect(() => {
     api.get<Paged<HealthUnit>>('/health-units').then((r) => setUnits(r.items)).catch(() => {});
@@ -61,6 +71,7 @@ export default function NovaVagaPage() {
         clientAmount: form.clientAmount ? Number(form.clientAmount) : undefined,
         doctorAmount: form.doctorAmount ? Number(form.doctorAmount) : undefined,
         description: form.description || undefined,
+        requiredDocuments: form.requiredDocuments,
       };
       const created = await api.post<{ id: string }>('/vacancies', payload);
       router.push(`/vagas/${created.id}`);
@@ -126,6 +137,19 @@ export default function NovaVagaPage() {
           <textarea className="input min-h-24" value={form.description} onChange={(e) => set('description', e.target.value)} />
         </L>
 
+        <div>
+          <span className="mb-1.5 block text-sm font-medium text-hm-text">Documentos obrigatórios para confirmar candidatura</span>
+          <p className="mb-2 text-xs text-hm-text-subtle">O profissional precisará enviar estes documentos antes de confirmar. Os demais ficam complementares.</p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {REQUIRED_DOC_KINDS.map(([kind, label]) => (
+              <label key={kind} className="flex items-center gap-2 text-sm text-hm-text">
+                <input type="checkbox" checked={form.requiredDocuments.includes(kind)} onChange={() => toggleDoc(kind)} />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
+
         <div className="flex justify-end gap-2 border-t border-hm-border-soft pt-4">
           <button type="button" className="btn-ghost" onClick={() => router.back()}>Cancelar</button>
           <button type="submit" className="btn-primary" disabled={saving}>{saving ? 'Criando…' : 'Criar vaga'}</button>
@@ -134,6 +158,14 @@ export default function NovaVagaPage() {
     </div>
   );
 }
+
+const REQUIRED_DOC_KINDS: [string, string][] = [
+  ['registro_profissional', 'Registro profissional'],
+  ['identificacao', 'Documento de identificação'],
+  ['curriculo', 'Currículo'],
+  ['certificado', 'Certificados'],
+  ['comprovante_vaga', 'Comprovante exigido pela vaga'],
+];
 
 function L({ label, children }: { label: string; children: React.ReactNode }) {
   return (

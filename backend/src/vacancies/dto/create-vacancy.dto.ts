@@ -1,6 +1,7 @@
 import { ShiftType, VacancyPriority, VacancyStatus, WorkModel } from '@prisma/client';
 import { Type } from 'class-transformer';
 import {
+  IsArray,
   IsBoolean,
   IsDateString,
   IsEnum,
@@ -43,5 +44,6 @@ export class CreateVacancyDto {
   @IsOptional() @IsString() currency?: string;
   @IsOptional() @IsBoolean() requiresHumanApproval?: boolean;
   @IsOptional() @IsBoolean() autoStartCampaign?: boolean;
+  @IsOptional() @IsArray() @IsString({ each: true }) requiredDocuments?: string[];
   @IsOptional() @IsString() notes?: string;
 }

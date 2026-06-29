@@ -11,6 +11,13 @@ import { Paged } from '@/lib/useApi';
 const STATUSES = ['DRAFT', 'OPEN', 'MATCHING', 'RECEIVING_APPLICATIONS', 'PARTIALLY_FILLED', 'FILLED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'ARCHIVED'];
 const PRIORITIES = ['LOW', 'NORMAL', 'HIGH', 'URGENT'];
 const WORK_MODELS = ['ONSITE', 'REMOTE', 'HYBRID'];
+const REQUIRED_DOC_KINDS: [string, string][] = [
+  ['registro_profissional', 'Registro profissional'],
+  ['identificacao', 'Documento de identificação'],
+  ['curriculo', 'Currículo'],
+  ['certificado', 'Certificados'],
+  ['comprovante_vaga', 'Comprovante exigido pela vaga'],
+];
 
 export default function EditarVagaPage() {
   const { id } = useParams<{ id: string }>();
@@ -23,7 +30,7 @@ export default function EditarVagaPage() {
 
   useEffect(() => {
     api.get<any>(`/vacancies/${id}/profile`).then((v) =>
-      setF({ title: v.title, healthUnitId: v.healthUnit?.id ?? v.healthUnitId ?? '', startsAt: toDateTimeLocal(v.startsAt), endsAt: toDateTimeLocal(v.endsAt), requiredDoctors: v.requiredDoctors, status: v.status, priority: v.priority, workModel: v.workModel, clientAmount: v.clientAmount ?? '', doctorAmount: v.doctorAmount ?? '', description: v.description ?? '' }),
+      setF({ title: v.title, healthUnitId: v.healthUnit?.id ?? v.healthUnitId ?? '', startsAt: toDateTimeLocal(v.startsAt), endsAt: toDateTimeLocal(v.endsAt), requiredDoctors: v.requiredDoctors, status: v.status, priority: v.priority, workModel: v.workModel, clientAmount: v.clientAmount ?? '', doctorAmount: v.doctorAmount ?? '', description: v.description ?? '', requiredDocuments: v.requiredDocuments ?? [] }),
     ).catch((e) => setError(e.message));
     api.get<Paged<any>>('/health-units?limit=100').then((r) => setUnits(r.items)).catch(() => {});
   }, [id]);
@@ -39,6 +46,7 @@ export default function EditarVagaPage() {
       };
       if (f.clientAmount !== '') payload.clientAmount = Number(f.clientAmount);
       if (f.doctorAmount !== '') payload.doctorAmount = Number(f.doctorAmount);
+      payload.requiredDocuments = f.requiredDocuments ?? [];
       await api.put(`/vacancies/${id}`, payload);
       router.push(`/vagas/${id}`);
     } catch (err: any) {
@@ -69,6 +77,18 @@ export default function EditarVagaPage() {
           <Field label="Valor profissional (R$)"><input className="input" type="number" step="0.01" value={f.doctorAmount} onChange={(e) => set('doctorAmount', e.target.value)} /></Field>
         </div>
         <Field label="Descrição"><textarea className="input min-h-24" value={f.description} onChange={(e) => set('description', e.target.value)} /></Field>
+        <div>
+          <span className="mb-1.5 block text-sm font-medium text-hm-text">Documentos obrigatórios para confirmar candidatura</span>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {REQUIRED_DOC_KINDS.map(([kind, label]) => (
+              <label key={kind} className="flex items-center gap-2 text-sm text-hm-text">
+                <input type="checkbox" checked={(f.requiredDocuments ?? []).includes(kind)}
+                  onChange={() => set('requiredDocuments', (f.requiredDocuments ?? []).includes(kind) ? f.requiredDocuments.filter((k: string) => k !== kind) : [...(f.requiredDocuments ?? []), kind])} />
+                {label}
+              </label>
+            ))}
+          </div>
+        </div>
         <FormActions onCancel={() => router.back()} saving={saving} submitLabel="Salvar alterações" />
       </form>
     </div>
