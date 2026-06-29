@@ -19,6 +19,8 @@ import {
   SendResult,
   WebhookRequest,
   WhatsAppProvider,
+  mediaPlaceholder,
+  normalizeMediaType,
   normalizePhone,
 } from '../whatsapp-provider.interface';
 import type { MessageStatus } from '@prisma/client';
@@ -123,13 +125,20 @@ export class OpenWaProvider implements WhatsAppProvider {
     if (p.fromMe === true) return null;
     // Campo do OpenWA é `sender` (telefone@c.us); demais como fallback.
     const from = p.sender ?? p.from ?? p.author ?? p.chatId;
-    const body = p.body ?? p.text ?? p.content;
-    if (!from || body == null) return null;
+    if (!from) return null;
+    const messageType = normalizeMediaType(p.type ?? p.messageType);
+    let body = p.body ?? p.text ?? p.content ?? p.caption ?? null;
+    const hasText = body != null && String(body).trim() !== '';
+    if (!hasText) {
+      if (messageType !== 'text') body = mediaPlaceholder(messageType); // mídia sem legenda
+      else return null; // texto vazio e sem mídia → nada útil
+    }
     const id = p.messageId ?? p.id?._serialized ?? p.id;
     return {
       from: normalizePhone(from),
       to: normalizePhone(p.recipient ?? p.to),
       body: String(body),
+      messageType,
       senderName: p.notifyName ?? p.pushName ?? p.senderName ?? p.contact?.pushName ?? undefined,
       externalMessageId: id,
       externalEventId: id,

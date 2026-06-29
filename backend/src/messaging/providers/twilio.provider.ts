@@ -11,11 +11,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { createHmac } from 'node:crypto';
 import {
   DeliveryUpdate,
+  InboundMessageType,
   NormalizedInbound,
   OutboundMessage,
   SendResult,
   WebhookRequest,
   WhatsAppProvider,
+  mediaPlaceholder,
+  normalizeMediaType,
   normalizePhone,
 } from '../whatsapp-provider.interface';
 import type { MessageStatus } from '@prisma/client';
@@ -114,11 +117,29 @@ export class TwilioProvider implements WhatsAppProvider {
     // ATENÇÃO: mensagens inbound de WhatsApp do Twilio trazem SmsStatus='received' — NÃO
     // descartar por SmsStatus, senão toda mensagem real do profissional é perdida.
     if (b.MessageStatus) return null;
-    if (!b.From || b.Body == null) return null;
+    if (!b.From) return null;
+
+    const numMedia = Number(b.NumMedia ?? 0);
+    const text = b.Body != null ? String(b.Body) : '';
+    const hasText = text.trim().length > 0;
+    const hasLocation = b.Latitude != null && b.Longitude != null;
+    if (!hasText && numMedia === 0 && !hasLocation) return null; // sem nada útil
+
+    let messageType: InboundMessageType = 'text';
+    let body = text;
+    if (numMedia > 0) {
+      messageType = normalizeMediaType(b.MediaContentType0);
+      if (!hasText) body = mediaPlaceholder(messageType); // preserva a legenda se houver
+    } else if (hasLocation) {
+      messageType = 'location';
+      if (!hasText) body = mediaPlaceholder('location');
+    }
+
     return {
       from: normalizePhone(b.From),
       to: normalizePhone(b.To),
-      body: String(b.Body),
+      body,
+      messageType,
       senderName: b.ProfileName ? String(b.ProfileName) : undefined,
       externalMessageId: b.MessageSid ?? b.SmsMessageSid,
       externalEventId: b.MessageSid ?? b.SmsMessageSid,

@@ -25,15 +25,60 @@ export interface SendResult {
   errorMessage?: string;
 }
 
+/** Tipo normalizado da mensagem (texto vs não-texto). */
+export type InboundMessageType =
+  | 'text'
+  | 'audio'
+  | 'image'
+  | 'video'
+  | 'document'
+  | 'sticker'
+  | 'location'
+  | 'contact'
+  | 'unknown';
+
 /** Mensagem recebida, normalizada a partir do webhook do provedor. */
 export interface NormalizedInbound {
   from: string; // telefone do profissional (E.164, sem prefixo de canal)
   to?: string;
   body: string;
+  messageType?: InboundMessageType; // 'text' p/ texto; outro = mídia/não-texto
   senderName?: string; // nome de perfil do WhatsApp (dado real), p/ semear o cadastro
   externalMessageId?: string;
   externalEventId?: string;
   raw: unknown;
+}
+
+const MEDIA_LABELS: Record<string, string> = {
+  audio: 'áudio',
+  image: 'imagem',
+  video: 'vídeo',
+  document: 'documento',
+  sticker: 'figurinha',
+  location: 'localização',
+  contact: 'contato',
+  unknown: 'mídia',
+};
+
+/** Normaliza um MIME (audio/ogg) ou um tipo do engine (chat/ptt/image) para InboundMessageType. */
+export function normalizeMediaType(raw?: string): InboundMessageType {
+  if (!raw) return 'unknown';
+  const v = raw.toLowerCase();
+  const base = v.includes('/') ? v.split('/')[0] : v;
+  if (base.startsWith('audio') || base === 'voice' || base === 'ptt') return 'audio';
+  if (base.startsWith('image')) return 'image';
+  if (base.startsWith('video')) return 'video';
+  if (base.startsWith('application') || base === 'document') return 'document';
+  if (base === 'sticker') return 'sticker';
+  if (base === 'location') return 'location';
+  if (base === 'contact' || base === 'vcard' || base === 'multi_vcard') return 'contact';
+  if (base === 'text' || base === 'chat') return 'text';
+  return 'unknown';
+}
+
+/** Placeholder textual para uma mídia (ex.: "[áudio]"), gravado no lugar do texto. */
+export function mediaPlaceholder(type: InboundMessageType): string {
+  return `[${MEDIA_LABELS[type] ?? 'mídia'}]`;
 }
 
 /** Atualização de status de entrega (delivery receipt). */

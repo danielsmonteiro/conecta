@@ -327,6 +327,7 @@ export class AiEngineService {
       'Se ele demonstrar interesse claro na vaga, chame registrar_candidatura.',
       'Quando o profissional decidir sobre o plantão, use registrar_resposta. Nunca confirme a cobertura sozinho: ações críticas vão para um humano.',
       'Se fugir do escopo (pagamento, reclamação, jurídico), use transferir_para_humano.',
+      'Se o profissional enviar mídia (você verá marcadores como [áudio], [imagem], [documento], [localização] no lugar do texto), explique gentilmente que por ora você só consegue ler mensagens de TEXTO e peça que ele escreva — NUNCA tente adivinhar o conteúdo da mídia.',
       'Não invente dados que não tem; consulte as ferramentas.',
       'NUNCA mencione ao profissional que você atualizou memória, salvou dados ou usou ferramentas — fale de forma natural.',
     ].join(' ');

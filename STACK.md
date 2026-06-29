@@ -146,3 +146,18 @@ quando tudo falha — para o usuário nunca ficar "no silêncio":
 
 Knobs (todas no compose, com defaults): `AI_DEBOUNCE_MS`, `AI_TIMEOUT_MS`, `AI_LLM_RETRIES`,
 `AI_JOB_ATTEMPTS`, `AI_WORKER_CONCURRENCY`, `AI_FALLBACK_MESSAGE`.
+
+## Mensagens não-texto (mídia)
+
+Áudio, imagem, vídeo, documento, figurinha, localização e contato são detectados nos
+adapters e tratados com elegância (antes a IA recebia corpo vazio/"lixo"):
+
+- **Normalização** (`whatsapp-provider.interface.ts`): `parseInbound` define `messageType`
+  e, quando não há texto, grava um placeholder legível no corpo (`[áudio]`, `[imagem]`…).
+  Twilio usa `NumMedia`/`MediaContentType0` (+ `Latitude/Longitude` p/ localização);
+  OpenWA usa o `type` do payload. Legenda (caption) é preservada quando existe.
+- **Resposta da IA**: o system prompt instrui a pedir gentilmente uma mensagem de TEXTO
+  ao receber mídia, sem tentar adivinhar o conteúdo.
+
+> Extensão futura: transcrever áudio (Whisper) e descrever imagem (visão) em vez de só
+> pedir texto — a normalização por `messageType` já deixa o gancho pronto.
