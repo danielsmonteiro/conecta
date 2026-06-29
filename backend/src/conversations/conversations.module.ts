@@ -120,18 +120,24 @@ export class ConversationsService {
     if (!professional) throw new NotFoundException('Professional not found');
 
     const subject = `Abordagem ativa - ${vacancy.title}`;
-    // Reaproveita a conversa aberta do profissional (evita múltiplas conversas
-    // abertas, que tornariam ambíguo o roteamento do inbound) e a re-vincula à vaga.
-    const open = await this.prisma.conversation.findFirst({
-      where: { professionalId: professional.id, status: { in: ['OPEN', 'AI_ACTIVE', 'WAITING_HUMAN'] } },
+    // Reusa a conversa aberta APENAS se já for desta mesma vaga (re-contato
+    // idempotente). Para uma vaga diferente, abre uma conversa NOVA dedicada — assim
+    // o histórico/funil fica limpo por vaga. O roteamento do inbound continua certo:
+    // ingestInbound pega a conversa aberta mais recente (esta, recém-criada).
+    const sameVaga = await this.prisma.conversation.findFirst({
+      where: {
+        professionalId: professional.id,
+        vacancyId: vacancy.id,
+        status: { in: ['OPEN', 'AI_ACTIVE', 'WAITING_HUMAN'] },
+      },
       orderBy: { lastMessageAt: 'desc' },
     });
 
     let conversation;
-    if (open) {
+    if (sameVaga) {
       conversation = await this.prisma.conversation.update({
-        where: { id: open.id },
-        data: { vacancyId: vacancy.id, channel: 'WHATSAPP', status: 'AI_ACTIVE', aiEnabled: true, subject },
+        where: { id: sameVaga.id },
+        data: { channel: 'WHATSAPP', status: 'AI_ACTIVE', aiEnabled: true, subject },
       });
     } else {
       conversation = await this.prisma.conversation.create({
@@ -218,5 +224,6 @@ export class ConversationsController {
   imports: [MessagingModule],
   controllers: [ConversationsController],
   providers: [ConversationsService],
+  exports: [ConversationsService],
 })
 export class ConversationsModule {}

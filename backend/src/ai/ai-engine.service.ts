@@ -262,6 +262,16 @@ export class AiEngineService {
         },
       },
       {
+        name: 'solicitar_descadastro',
+        description:
+          'Registra o opt-out do profissional quando ele pedir para NÃO receber novas oportunidades/mensagens ' +
+          '(ex.: "não quero mais", "pare de me enviar vagas", "me descadastre"). Diferente de recusar uma vaga específica.',
+        parameters: {
+          type: 'object',
+          properties: { motivo: { type: 'string', description: 'O que o profissional disse ao pedir para sair.' } },
+        },
+      },
+      {
         name: 'transferir_para_humano',
         description: 'Transfere a conversa para um atendente humano. Use em dúvidas fora do escopo ou pedido explícito.',
         parameters: {
@@ -315,22 +325,42 @@ export class AiEngineService {
           await this.prisma.application.create({
             data: { vacancyId: v.id, professionalId: conv.professionalId, origin: 'AI', status: 'PENDING' },
           });
+          // Marca interesse no funil da vaga.
+          await this.prisma.conversation.update({ where: { id: conv.id }, data: { interest: 'INTERESTED' } });
           return { content: 'Candidatura registrada.', isAction: true };
         }
         case 'registrar_resposta': {
           const intencao = tc.arguments?.intencao ?? 'indeciso';
           const resumo = String(tc.arguments?.resumo ?? '').slice(0, 280);
+          // Reflete no funil: aceitou→interessado, recusou→sem interesse.
+          const interest = intencao === 'aceitou' ? 'INTERESTED' : intencao === 'recusou' ? 'NOT_INTERESTED' : undefined;
           // Ação CRÍTICA: aceite vira cobertura confirmada → exige humano se configurado.
           if (intencao === 'aceitou' && cfg.requireHuman) {
+            await this.prisma.conversation.update({ where: { id: conv.id }, data: { interest: 'INTERESTED' } });
             await this.handoff(conv.id, `Profissional aceitou — confirmar cobertura. ${resumo}`);
             ctx.handedOff = true;
             return { content: 'Aceite registrado e ENCAMINHADO para um humano confirmar a cobertura.', isAction: true };
           }
           await this.prisma.conversation.update({
             where: { id: conv.id },
-            data: { internalSummary: `[IA] ${intencao}: ${resumo}` },
+            data: { internalSummary: `[IA] ${intencao}: ${resumo}`, ...(interest ? { interest } : {}) },
           });
           return { content: `Resposta registrada (${intencao}).`, isAction: true };
+        }
+        case 'solicitar_descadastro': {
+          // Opt-out: o profissional pediu para não receber novas oportunidades.
+          if (conv.professionalId) {
+            await this.prisma.healthProfessional.update({
+              where: { id: conv.professionalId },
+              data: { doNotContact: true },
+            });
+          }
+          const motivo = String(tc.arguments?.motivo ?? '').slice(0, 280);
+          await this.prisma.conversation.update({
+            where: { id: conv.id },
+            data: { internalSummary: `[IA] opt-out: ${motivo}` },
+          });
+          return { content: 'Profissional descadastrado de novas oportunidades (opt-out registrado).', isAction: true };
         }
         case 'transferir_para_humano': {
           await this.handoff(conv.id, String(tc.arguments?.motivo ?? 'Solicitado pela IA.'));
@@ -365,6 +395,8 @@ export class AiEngineService {
       'Sempre que o profissional informar algo sobre si (nome, cidade, profissão, especialidade, disponibilidade, pretensão salarial, preferências), chame atualizar_memoria — SOMENTE com o que ele realmente disse, NUNCA invente nem deduza. Ex.: se ele disser apenas a cidade, NÃO preencha o estado/UF.',
       'Se ele demonstrar interesse claro na vaga, chame registrar_candidatura.',
       'Quando o profissional decidir sobre o plantão, use registrar_resposta. Nunca confirme a cobertura sozinho: ações críticas vão para um humano.',
+      'Deixe claro que você está APRESENTANDO uma oportunidade e verificando interesse — nunca prometa contratação, aprovação no processo ou vaga garantida.',
+      'Se o profissional pedir para NÃO receber mais oportunidades/mensagens (descadastro/opt-out), chame solicitar_descadastro e confirme que ele não será mais contatado.',
       'Se fugir do escopo (pagamento, reclamação, jurídico), use transferir_para_humano.',
       'Se o profissional enviar mídia (você verá marcadores como [áudio], [imagem], [documento], [localização] no lugar do texto), explique gentilmente que por ora você só consegue ler mensagens de TEXTO e peça que ele escreva — NUNCA tente adivinhar o conteúdo da mídia.',
       'Não invente dados que não tem; consulte as ferramentas.',

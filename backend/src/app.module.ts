@@ -8,6 +8,7 @@ import { CbosModule } from './cbos/cbos.module';
 import { AllocationsModule } from './allocations/allocations.module';
 import { ApplicationsModule } from './applications/applications.module';
 import { AuthModule } from './auth/auth.module';
+import { CampaignsModule } from './campaigns/campaigns.module';
 import { ContractsModule } from './contracts/contracts.module';
 import { ConversationsModule } from './conversations/conversations.module';
 import { DashboardModule } from './dashboard/dashboard.module';
@@ -47,6 +48,7 @@ import { VacanciesModule } from './vacancies/vacancies.module';
     MatchingModule,
     FinancialModule,
     ConversationsModule,
+    CampaignsModule,
     MessagingModule,
     AiModule,
     MemoryModule,

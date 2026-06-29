@@ -41,6 +41,22 @@ interface OutreachState {
   openerSent?: boolean;
   message?: string;
 }
+interface Funnel {
+  counts: {
+    encontrados: number;
+    contatados: number;
+    responderam: number;
+    interessados: number;
+    semInteresse: number;
+    semResposta: number;
+  };
+}
+interface PublishResult {
+  status: string;
+  eligibleCount: number;
+  contactedCount: number;
+  message: string;
+}
 
 export default function VagaDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -49,6 +65,28 @@ export default function VagaDetailPage() {
   const [financial, setFinancial] = useState<Financial | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [outreach, setOutreach] = useState<Record<string, OutreachState>>({});
+  const [funnel, setFunnel] = useState<Funnel | null>(null);
+  const [publishing, setPublishing] = useState(false);
+  const [publishResult, setPublishResult] = useState<PublishResult | { error: string } | null>(null);
+
+  function loadFunnel() {
+    api.get<Funnel>(`/vacancies/${id}/funnel`).then(setFunnel).catch(() => {});
+  }
+
+  async function publicar() {
+    setPublishing(true);
+    setPublishResult(null);
+    try {
+      const r = await api.post<PublishResult>(`/vacancies/${id}/publish`);
+      setPublishResult(r);
+      api.get<Profile>(`/vacancies/${id}/profile`).then(setProfile).catch(() => {});
+      loadFunnel();
+    } catch (e) {
+      setPublishResult({ error: (e as Error).message });
+    } finally {
+      setPublishing(false);
+    }
+  }
 
   async function abordar(doctorId: string) {
     setOutreach((o) => ({ ...o, [doctorId]: { status: 'sending' } }));
@@ -67,6 +105,7 @@ export default function VagaDetailPage() {
     api.get<Profile>(`/vacancies/${id}/profile`).then(setProfile).catch((e) => setError(e.message));
     api.get<MatchScore[]>(`/vacancies/${id}/matching?limit=5`).then(setScores).catch(() => {});
     api.get<Financial>(`/vacancies/${id}/financial`).then(setFinancial).catch(() => {});
+    loadFunnel();
   }, [id]);
 
   if (error) return <ErrorState message={error} />;
@@ -80,10 +119,32 @@ export default function VagaDetailPage() {
         action={
           <div className="flex items-center gap-3">
             <Link href={`/vagas/${id}/editar`} className="btn-ghost">Editar</Link>
+            <button
+              type="button"
+              onClick={publicar}
+              disabled={publishing}
+              className="btn-primary text-sm disabled:opacity-50"
+            >
+              {publishing ? 'Publicando…' : 'Publicar e buscar profissionais'}
+            </button>
             <StatusBadge status={profile.status} />
           </div>
         }
       />
+
+      {publishResult && (
+        <div
+          className={`mb-4 rounded-hm-sm border px-4 py-3 text-sm ${
+            'error' in publishResult
+              ? 'border-hm-warning/40 bg-hm-warning/10 text-hm-warning'
+              : 'border-hm-success/40 bg-hm-success/10 text-hm-text'
+          }`}
+        >
+          {'error' in publishResult
+            ? `Não foi possível publicar: ${publishResult.error}`
+            : `${publishResult.message} (${publishResult.eligibleCount} elegíveis · ${publishResult.contactedCount} contatados)`}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
@@ -143,6 +204,21 @@ export default function VagaDetailPage() {
         </div>
 
         <div className="space-y-6">
+          <Panel title="Funil da vaga">
+            {funnel ? (
+              <ul className="space-y-1.5 text-sm">
+                <FunnelRow label="Encontrados" value={funnel.counts.encontrados} />
+                <FunnelRow label="Contatados" value={funnel.counts.contatados} />
+                <FunnelRow label="Responderam" value={funnel.counts.responderam} />
+                <FunnelRow label="Interessados" value={funnel.counts.interessados} highlight />
+                <FunnelRow label="Sem interesse" value={funnel.counts.semInteresse} />
+                <FunnelRow label="Sem resposta" value={funnel.counts.semResposta} />
+              </ul>
+            ) : (
+              <p className="text-sm text-hm-text-subtle">—</p>
+            )}
+          </Panel>
+
           <Panel title="Financeiro">
             {financial ? (
               <dl className="space-y-2 text-sm">
@@ -168,5 +244,20 @@ function Info({ label, value }: { label: string; value: string }) {
       <dt className="text-xs uppercase tracking-wide text-hm-text-subtle">{label}</dt>
       <dd className="mt-0.5 font-medium text-hm-text">{value}</dd>
     </div>
+  );
+}
+
+function FunnelRow({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+  return (
+    <li className="flex items-center justify-between">
+      <span className="text-hm-text-subtle">{label}</span>
+      <span
+        className={`rounded-full px-2.5 py-0.5 text-sm font-semibold ${
+          highlight ? 'bg-hm-success/15 text-hm-success' : 'bg-hm-primary-soft text-hm-primary'
+        }`}
+      >
+        {value}
+      </span>
+    </li>
   );
 }

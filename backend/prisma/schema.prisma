@@ -313,6 +313,8 @@ model HealthProfessional {
   noShowCount              Int                 @default(0)
   attendanceRate           Decimal?            @db.Decimal(5, 2)
   notes                    String?
+  // Opt-out de contato proativo (campanhas/abordagem). Default false = contatável.
+  doNotContact             Boolean             @default(false)
   metrics                  ProfessionalMetrics?
   memory                   ProfessionalMemory?
   applications             Application[]
@@ -599,6 +601,12 @@ enum ConversationStatus {
   CLOSED
 }
 
+// Interesse declarado pelo profissional numa conversa (funil da campanha).
+enum InterestStatus {
+  INTERESTED
+  NOT_INTERESTED
+}
+
 enum MessageDirection {
   INBOUND
   OUTBOUND
@@ -627,6 +635,8 @@ model Conversation {
   channel            ChannelType         @default(WHATSAPP)
   status             ConversationStatus  @default(OPEN)
   aiEnabled          Boolean             @default(false)
+  // Interesse do profissional nesta conversa (alimenta o funil da vaga).
+  interest           InterestStatus?
   lastMessagePreview String?
   internalSummary    String?
   subject            String?

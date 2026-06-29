@@ -67,6 +67,50 @@ Profissionais, Organizações, Contratos. Os demais itens do menu (Candidaturas,
 Matching, Alocações, Escala, Financeiro, Conversas, I.A., Integrações, Auditoria,
 Configurações) têm os endpoints prontos no backend — faltam as telas.
 
+## Campanha automática na publicação (busca + contato + funil)
+
+História-chave: o contratante **publica a vaga** e o sistema **busca, classifica e
+contata automaticamente** os profissionais mais aderentes por WhatsApp com IA, e o
+contratante **acompanha o funil**.
+
+### Publicação
+
+- **`POST /api/vacancies/:id/publish`** — valida os campos obrigatórios (senão `400`
+  listando o que falta), roda o matching, filtra **elegíveis** (passam nos requisitos
+  mínimos), **com WhatsApp** e **sem opt-out** (`doNotContact=false`), ordena por
+  aderência, pega o **top N** (`CAMPAIGN_MAX_CONTACTS`, default 5) e dispara a abordagem
+  por WhatsApp (reusa a `startOutreach`). Define `status=RECEIVING_APPLICATIONS`
+  (publicada) ou `PENDING_HUMAN_REVIEW` quando **nenhum** compatível é encontrado.
+  Retorna `{ eligibleCount, contactedCount, contacted[], skipped:{optOut,semWhatsapp}, message }`.
+
+### Mensagem personalizada (template HealthMatch)
+
+Montada por vaga + perfil: apresenta-se como HealthMatch, descreve estabelecimento
+(tipo da unidade), cargo, localização (cidade/UF da unidade), carga horária (calculada
+de início→fim), modelo de contratação e remuneração (quando houver), e pergunta o
+interesse. A IA conduz a conversa pelas tools já existentes.
+
+### Funil de acompanhamento
+
+- **`GET /api/vacancies/:id/funnel`** — calcula de matching + conversas + candidaturas:
+  `encontrados, contatados, responderam, interessados, semInteresse, semResposta` +
+  a lista por profissional com o `stage`. Na UI (`/vagas/:id`) há o painel **"Funil da vaga"**
+  e o botão **"Publicar e buscar profissionais"**.
+- Sinais por vaga ficam limpos porque a campanha usa **uma conversa por (vaga, profissional)**:
+  `startOutreach` só reusa a conversa aberta se já for **da mesma vaga**; para vaga
+  diferente abre uma conversa nova (o roteamento do inbound continua certo — pega a aberta
+  mais recente).
+
+### Consentimento / opt-out
+
+- Campo `HealthProfessional.doNotContact` (default `false` = contatável). A campanha
+  **pula** quem tem opt-out e o lista em `skipped.optOut`.
+- Tool de IA **`solicitar_descadastro`**: quando o profissional pede para não receber mais
+  oportunidades, a IA marca `doNotContact=true` (rastreável no `internalSummary`).
+- Marcador `Conversation.interest` (`INTERESTED`/`NOT_INTERESTED`) alimenta o funil: a IA
+  seta via `registrar_candidatura`/`registrar_resposta`.
+- A IA nunca promete contratação/remuneração/aprovação (guardrails + system prompt).
+
 ## Abordagem ativa (vínculo conversa↔vaga)
 
 Uma candidatura por WhatsApp acontece **dentro de uma conversa vinculada a uma vaga** — é esse
