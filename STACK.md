@@ -129,3 +129,20 @@ recebida enfileira um job durável (BullMQ sobre Redis) consumido por um worker.
 > Limite conhecido: serialização por conversa depende do coalescing por `jobId` (uma
 > mensagem que chegue durante o run ativo é reprocessada na próxima mensagem). Para
 > garantia estrita multi-instância, um lock por conversa no Redis seria o próximo passo.
+
+## Resiliência da chamada de IA (retry + fallback)
+
+Além do retry da fila (job), a própria chamada à OpenAI tem retry fino e há um fallback
+quando tudo falha — para o usuário nunca ficar "no silêncio":
+
+- **Retry/backoff no provider** (`openai.provider.ts`): erros TRANSITÓRIOS (HTTP 429/5xx,
+  rede, timeout) são reexecutados com backoff exponencial (`AI_LLM_RETRIES`, default 2;
+  respeita `Retry-After`). Erros PERMANENTES (400/401/403/404/422 — payload/credencial)
+  falham na hora, sem retry.
+- **Fallback de falha final** (`AiInboundWorker` → `AiEngineService.handleInboundFailure`):
+  quando o job esgota os retries (`AI_JOB_ATTEMPTS`), envia uma mensagem de cortesia
+  (`AI_FALLBACK_MESSAGE`) e transfere a conversa para humano (`WAITING_HUMAN`), parando a
+  auto-resposta. Assim a falha vira escalonamento, não dead-air.
+
+Knobs (todas no compose, com defaults): `AI_DEBOUNCE_MS`, `AI_TIMEOUT_MS`, `AI_LLM_RETRIES`,
+`AI_JOB_ATTEMPTS`, `AI_WORKER_CONCURRENCY`, `AI_FALLBACK_MESSAGE`.

@@ -52,6 +52,27 @@ export class AiEngineService {
     await this.run(conversationId, { trigger: 'INBOUND_MESSAGE' });
   }
 
+  /**
+   * Fallback de falha FINAL (após esgotar os retries da fila): evita "dead-air" —
+   * avisa o profissional e transfere para um humano (a IA para de auto-responder).
+   * Chamado pelo worker no evento de falha definitiva.
+   */
+  async handleInboundFailure(conversationId: string) {
+    const conv = await this.prisma.conversation.findUnique({ where: { id: conversationId } });
+    if (!conv || conv.status === 'WAITING_HUMAN') return; // já encaminhada
+    const msg =
+      process.env.AI_FALLBACK_MESSAGE ||
+      'Tive uma instabilidade técnica por aqui 😕 Um atendente vai te responder em instantes.';
+    try {
+      if (!this.cfg().dryRun) {
+        await this.messaging.sendFromConversation(conversationId, msg, { sentByAi: true });
+      }
+    } catch (e: any) {
+      this.logger.error(`fallback send (${conversationId}): ${e?.message}`);
+    }
+    await this.handoff(conversationId, 'Falha repetida no motor de IA — encaminhado para humano.');
+  }
+
   /** Roda o motor numa conversa: contexto → modelo → tools → resposta. */
   async run(conversationId: string, opts: RunOpts = {}) {
     const cfg = this.cfg();

@@ -92,6 +92,13 @@ services:
       AI_DRY_RUN: ${AI_DRY_RUN:-true}
       AI_REQUIRE_HUMAN: ${AI_REQUIRE_HUMAN:-true}
       AI_MAX_CONTEXT_MESSAGES: ${AI_MAX_CONTEXT_MESSAGES:-20}
+      # Robustez do motor (#1 debounce, #2 fila, #3 retry/fallback) — knobs configuráveis.
+      AI_DEBOUNCE_MS: ${AI_DEBOUNCE_MS:-4000}
+      AI_TIMEOUT_MS: ${AI_TIMEOUT_MS:-30000}
+      AI_LLM_RETRIES: ${AI_LLM_RETRIES:-2}
+      AI_JOB_ATTEMPTS: ${AI_JOB_ATTEMPTS:-3}
+      AI_WORKER_CONCURRENCY: ${AI_WORKER_CONCURRENCY:-5}
+      AI_FALLBACK_MESSAGE: ${AI_FALLBACK_MESSAGE:-}
     # Hot-reload: db push + seed idempotente + watch.
     command: >
       sh -c "npx prisma db push --accept-data-loss &&

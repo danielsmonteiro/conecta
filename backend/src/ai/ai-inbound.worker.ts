@@ -23,9 +23,16 @@ export class AiInboundWorker implements OnModuleInit, OnApplicationShutdown {
       },
       { connection: redisConnection(), concurrency: Number(process.env.AI_WORKER_CONCURRENCY ?? 5) },
     );
-    this.worker.on('failed', (job, err) =>
-      this.logger.error(`job ${job?.id} falhou (tentativa ${job?.attemptsMade}/${job?.opts?.attempts}): ${err?.message}`),
-    );
+    this.worker.on('failed', async (job, err) => {
+      const attempts = job?.opts?.attempts ?? 1;
+      this.logger.error(`job ${job?.id} falhou (tentativa ${job?.attemptsMade}/${attempts}): ${err?.message}`);
+      // Só na falha FINAL (retries esgotados) aciona o fallback (uma única vez).
+      if (job && (job.attemptsMade ?? 0) >= attempts) {
+        await this.engine
+          .handleInboundFailure(job.data.conversationId)
+          .catch((e) => this.logger.error(`fallback (${job.data?.conversationId}): ${e?.message}`));
+      }
+    });
     this.worker.on('error', (err) => this.logger.error(`worker error: ${err?.message}`));
     this.logger.log('AiInboundWorker iniciado (fila ai-inbound).');
   }
