@@ -197,6 +197,12 @@ landing mobile-first onde ele confirma a candidatura em um toque (estilo "one-cl
   `middleware.ts`): single-column, carrega rápido, mostra cargo/estabelecimento/cidade/carga/
   modalidade/remuneração/início + "por que combina" + botão grande "Confirmar candidatura";
   estados active/confirmed/expired/inválido. Não edita dados sensíveis (só confirma).
+- **Gating de documentos no one-click**: se a vaga exige documentos (`Vacancy.requiredDocuments`)
+  que o profissional ainda não enviou, o `confirm` NÃO registra candidatura — gera um link de
+  **cadastro/documentos** (RegistrationService) e responde `200 { needsDocuments:true, registrationUrl,
+  missingRequiredDocs }`; a página redireciona para lá (upload + confirmação) e a IA envia o link
+  pelo WhatsApp. Com os documentos presentes, o one-click confirma direto. (O hotsite não tem upload
+  próprio — reusa o fluxo de cadastro para os documentos, evitando beco sem saída.)
 - **Segurança**: token bearer temporário + log de acesso (UA/IP/origem). Step-up por OTP via
   WhatsApp em acesso suspeito é hardening futuro (a história permite link mágico/token simples).
 - A IA não promete contratação/aprovação (guardrails + texto da página). Origem exibida em

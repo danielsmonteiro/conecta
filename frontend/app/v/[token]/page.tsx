@@ -23,9 +23,19 @@ interface ViewData {
   status: 'active' | 'expired' | 'confirmed';
   expiresAt: string;
   pendingFields: string[];
+  requiredDocuments?: string[];
+  missingRequiredDocs?: string[];
   professional: { firstName: string };
   vaga: Vaga | null;
 }
+
+const DOC_LABEL: Record<string, string> = {
+  registro_profissional: 'Registro profissional',
+  identificacao: 'Documento de identificação',
+  curriculo: 'Currículo',
+  certificado: 'Certificados',
+  comprovante_vaga: 'Comprovante exigido pela vaga',
+};
 
 function brl(v: number, moeda = 'BRL') {
   try {
@@ -64,9 +74,14 @@ export default function HotsitePage() {
     setError(null);
     try {
       const res = await fetch(`/api/hotsite/${token}/confirm`, { method: 'POST' });
+      const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const body = await res.json().catch(() => ({}));
         throw new Error(body.message || (res.status === 410 ? 'Este link expirou.' : `Erro ${res.status}`));
+      }
+      // Vaga exige documentos: o hotsite não tem upload → segue para o cadastro/documentos.
+      if (body.needsDocuments && body.registrationUrl) {
+        window.location.href = body.registrationUrl;
+        return;
       }
       setConfirmed(true);
     } catch (e) {
@@ -142,6 +157,15 @@ export default function HotsitePage() {
             </div>
           </Card>
 
+          {!!data.missingRequiredDocs?.length && (
+            <div className="mt-4 rounded-hm-sm border border-hm-warning/40 bg-hm-warning/10 px-3 py-2.5">
+              <p className="text-xs font-medium text-hm-warning">Esta vaga exige documentos</p>
+              <p className="mt-0.5 text-sm text-hm-text">
+                Para confirmar, envie: {data.missingRequiredDocs.map((k) => DOC_LABEL[k] || k).join(', ')}. Você fará isso em uma página rápida na próxima etapa.
+              </p>
+            </div>
+          )}
+
           {error && <p className="mt-3 text-sm text-hm-warning">{error}</p>}
 
           <button
@@ -150,7 +174,9 @@ export default function HotsitePage() {
             disabled={confirming}
             className="btn-primary mt-5 w-full py-4 text-base font-semibold disabled:opacity-60"
           >
-            {confirming ? 'Confirmando…' : 'Confirmar candidatura'}
+            {confirming
+              ? (data.missingRequiredDocs?.length ? 'Abrindo…' : 'Confirmando…')
+              : (data.missingRequiredDocs?.length ? 'Enviar documentos e confirmar' : 'Confirmar candidatura')}
           </button>
           <p className="mt-3 text-center text-xs text-hm-text-subtle">
             Ao confirmar, você demonstra interesse nesta vaga. Isso não garante contratação nem aprovação no processo.

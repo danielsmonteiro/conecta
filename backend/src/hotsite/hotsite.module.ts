@@ -15,7 +15,15 @@ import type { Request } from 'express';
 import { PrismaService } from '../prisma/prisma.service';
 import { MessagingModule } from '../messaging/messaging.module';
 import { MessagingService } from '../messaging/messaging.service';
+import { RegistrationModule, RegistrationService } from '../registration/registration.module';
 
+const DOC_LABEL: Record<string, string> = {
+  registro_profissional: 'Registro profissional',
+  identificacao: 'Documento de identificação',
+  curriculo: 'Currículo',
+  certificado: 'Certificados',
+  comprovante_vaga: 'Comprovante exigido pela vaga',
+};
 const UNIT_TYPE_LABEL: Record<string, string> = {
   CLINIC: 'Clínica',
   HOSPITAL: 'Hospital',
@@ -31,7 +39,20 @@ export class HotsiteService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly messaging: MessagingService,
+    private readonly registration: RegistrationService,
   ) {}
+
+  // Documentos OBRIGATÓRIOS da vaga ainda não enviados pelo profissional.
+  private async missingRequiredDocs(vaga: any, professionalId: string): Promise<string[]> {
+    const required: string[] = vaga?.requiredDocuments || [];
+    if (!required.length) return [];
+    const docs = await this.prisma.professionalDocument.findMany({
+      where: { professionalId, supersededAt: null },
+      select: { kind: true },
+    });
+    const sent = new Set(docs.map((d) => d.kind));
+    return required.filter((k) => !sent.has(k));
+  }
 
   private ttlHours(): number {
     const n = Number(process.env.HOTSITE_LINK_TTL_HOURS);
@@ -95,12 +116,15 @@ export class HotsiteService {
     });
     const prof = await this.prisma.healthProfessional.findUnique({ where: { id: link.professionalId } });
     const pending = this.pendingFields(prof);
+    const missingDocs = vaga ? await this.missingRequiredDocs(vaga, link.professionalId) : [];
 
     return {
       status,
       expiresAt: link.expiresAt,
       confirmedAt: link.confirmedAt,
       pendingFields: pending,
+      requiredDocuments: (vaga as any)?.requiredDocuments || [],
+      missingRequiredDocs: missingDocs,
       professional: { firstName: (prof?.fullName || '').trim().split(/\s+/)[0] || 'Profissional' },
       vaga: vaga ? this.vagaView(vaga) : null,
     };
@@ -120,6 +144,35 @@ export class HotsiteService {
     }
     const vaga = await this.prisma.vacancy.findFirst({ where: { id: link.vacancyId, deletedAt: null }, include: { healthUnit: true, specialty: true } });
     if (!vaga) throw new NotFoundException('Vaga não encontrada.');
+
+    // Gating: a vaga exige documentos que o profissional ainda não enviou. Como o hotsite
+    // não tem upload, gera um link de CADASTRO (que tem upload + confirmação) e direciona
+    // para lá — em vez de bloquear sem saída. NÃO registra candidatura aqui.
+    const missingDocs = await this.missingRequiredDocs(vaga, link.professionalId);
+    if (missingDocs.length) {
+      const reg = await this.registration.createLink({
+        professionalId: link.professionalId,
+        vacancyId: link.vacancyId,
+        conversationId: link.conversationId || undefined,
+        channel: link.channel,
+      });
+      const labels = missingDocs.map((k) => DOC_LABEL[k] || k);
+      if (link.conversationId) {
+        const nome = (prof.fullName || '').trim().split(/\s+/)[0] || '';
+        const msg =
+          `Quase lá${nome ? ', ' + nome : ''}! Esta vaga exige o envio de ${labels.join(', ')} antes de confirmar. ` +
+          `Você pode enviar e concluir sua candidatura por aqui: ${reg.url}`;
+        await this.messaging.sendFromConversation(link.conversationId, msg, { sentByAi: true }).catch(() => undefined);
+      }
+      return {
+        ok: false,
+        needsDocuments: true,
+        missingRequiredDocs: missingDocs,
+        missingRequiredDocsLabels: labels,
+        registrationUrl: reg.url,
+        message: `Esta vaga exige documentos obrigatórios (${labels.join(', ')}). Envie-os para confirmar.`,
+      };
+    }
 
     // Idempotente: reaproveita candidatura existente p/ (profissional, vaga).
     let application = await this.prisma.application.findFirst({
@@ -226,7 +279,7 @@ export class HotsiteController {
 }
 
 @Module({
-  imports: [MessagingModule],
+  imports: [MessagingModule, RegistrationModule],
   controllers: [HotsiteController],
   providers: [HotsiteService],
   exports: [HotsiteService],
