@@ -11,6 +11,7 @@ import {
   DollarSign,
   FileText,
   Hospital,
+  KeyRound,
   Landmark,
   LayoutDashboard,
   MessageSquare,
@@ -82,6 +83,7 @@ const SECTIONS: NavSection[] = [
       { label: 'Conversas', href: '/conversas', icon: MessageSquare },
       { label: 'I.A.', href: '/ia', icon: Bot },
       { label: 'Integrações', href: '/integracoes', icon: Plug },
+      { label: 'Parceiros', href: '/parceiros', icon: KeyRound },
     ],
   },
   {
