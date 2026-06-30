@@ -18,15 +18,18 @@ import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { PaginationDto, paginate } from '../common/dto/pagination.dto';
 import { PrismaService } from '../prisma/prisma.service';
 
+const ALLOCATION_STATUSES = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'REPLACEMENT_NEEDED'];
+
 class CreateAllocationDto {
   @IsString() vacancyId: string;
   @IsString() professionalId: string;
   @IsOptional() @IsDateString() startsAt?: string;
   @IsOptional() @IsDateString() endsAt?: string;
+  @IsOptional() @IsIn(ALLOCATION_STATUSES) status?: any;
 }
 
 class UpdateAllocationStatusDto {
-  @IsIn(['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'COMPLETED', 'CANCELLED', 'REPLACEMENT_NEEDED'])
+  @IsIn(ALLOCATION_STATUSES)
   status: any;
 }
 
@@ -72,6 +75,9 @@ export class AllocationsService {
         professionalId: dto.professionalId,
         startsAt: dto.startsAt ? new Date(dto.startsAt) : vacancy.startsAt,
         endsAt: dto.endsAt ? new Date(dto.endsAt) : vacancy.endsAt,
+        // Status opcional na criação (default PENDING via schema). Transições com
+        // efeitos colaterais (filledDoctors/métricas) continuam via PATCH /:id/status.
+        ...(dto.status ? { status: dto.status } : {}),
       },
     });
   }
