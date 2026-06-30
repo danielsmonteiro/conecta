@@ -515,6 +515,7 @@ enum ApplicationOrigin {
   MATCHING
   HOTSITE
   WHATSAPP_REGISTRATION
+  PARTNER
 }
 
 enum MatchCategory {
@@ -906,4 +907,21 @@ model ProfessionalDocument {
 
   @@index([professionalId])
   @@index([candidacyLinkId])
+}
+
+// Parceiro de integração (omnichannel de terceiros). Autentica na API do conector
+// por API key (guardamos só o hash); pode assinar eventos (webhook de saída).
+model Partner {
+  id            String    @id @default(cuid())
+  name          String
+  apiKeyHash    String    @unique          // sha256 da chave (a chave em claro só é exibida na criação)
+  apiKeyPrefix  String                      // prefixo p/ identificação na UI/logs (ex.: hm_live_ab12cd)
+  active        Boolean   @default(true)
+  scopes        String[]  @default([])      // ex.: vacancies:read, matching:read, applications:write, professionals:write, links:write
+  webhookUrl    String?                     // destino dos eventos (push)
+  webhookSecret String?                     // segredo p/ assinar (HMAC-SHA256) os eventos
+  events        String[]  @default([])      // tipos de evento assinados (ex.: application.created)
+  lastUsedAt    DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
 }

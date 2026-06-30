@@ -208,6 +208,29 @@ landing mobile-first onde ele confirma a candidatura em um toque (estilo "one-cl
 - A IA não promete contratação/aprovação (guardrails + texto da página). Origem exibida em
   Candidaturas como "WhatsApp + hotsite".
 
+## Conector de integração para parceiros (omnichannel de terceiros)
+
+Permite que uma ferramenta de terceiros (omnichannel com IA própria) consuma dados e receba
+eventos do HealthMatch. Documentação do fornecedor em **[CONNECTOR.md](CONNECTOR.md)**.
+
+- **Auth por API key** (modelo `Partner` no banco — guarda só o `apiKeyHash` SHA-256 + prefixo).
+  `Authorization: Bearer hm_live_...`. Escopos por chave (`vacancies:read`, `applications:write`, …).
+  `PartnerAuthGuard` valida e injeta `req.partner`.
+- **Pull API** (`/api/connector/v1`, guard de parceiro): `health`, `vacancies` (lista/detalhe),
+  `professionals/identify` (upsert por WhatsApp), `professionals/:id`,
+  `matching/vacancies-for-professional` (matching reverso), `applications` (registra origem
+  `PARTNER` + consulta), `links` (gera magic-link de hotsite/cadastro).
+- **Push (webhooks)**: eventos `application.created`, `application.status_changed`,
+  `vacancy.status_changed` enviados ao `webhookUrl` do parceiro, **assinados HMAC-SHA256**
+  (`X-HealthMatch-Signature: sha256=…`). Captura via barramento em processo (`domain-events.ts`)
+  + `PrismaService.$use` (middleware) → `ConnectorEventsService` entrega (best-effort, com timeout).
+  Como o middleware do Prisma intercepta TODA criação/mudança de `Application`, o evento dispara
+  independentemente do fluxo (parceiro, IA, hotsite, cadastro, admin).
+- **Admin (JWT)** `/api/partners`: CRUD de parceiros + `rotate-key` + `rotate-webhook-secret`
+  (chave e segredo só aparecem em claro na criação/rotação). `available-scopes` lista escopos/eventos.
+- Limitação conhecida: entrega de webhook é best-effort (sem fila de retry garantida) — combinar
+  com polling de `GET /applications` para conciliação; rate limiting por chave é hardening futuro.
+
 ## Abordagem ativa (vínculo conversa↔vaga)
 
 Uma candidatura por WhatsApp acontece **dentro de uma conversa vinculada a uma vaga** — é esse
